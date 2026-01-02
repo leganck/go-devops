@@ -1,0 +1,38 @@
+# 编译生成的二进制文件
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go模块相关文件
+/vendor/
+/go.sum
+
+# IDE相关配置
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 操作系统相关文件
+.DS_Store
+Thumbs.db
+
+# 环境变量文件
+.env
+.env.local
+.env.*.local
+
+# 日志文件
+*.log
+logs/
+
+# 测试覆盖率文件
+*.out
+coverage/
+
+# 其他临时文件
+*.tmp
+*.temp
