@@ -9,6 +9,7 @@
 - **版本管理**：查询可用版本，支持模糊匹配
 - **服务器管理**：列出服务器并验证服务器存在性
 - **部署**：将程序部署到指定服务器，并自动生成通知备忘录
+- **部署等待**：等待部署任务完成，支持可配置超时
 - **结构化日志**：不同日志级别的详细日志记录
 - **自定义错误处理**：带有错误代码的一致错误消息
 - **环境变量支持**：使用环境变量配置插件
@@ -52,13 +53,14 @@
 | `--project-version` | | 要检查或部署的项目版本 | | `PLUGIN_PROJECT_VERSION`, `DEVOPS_PROJECT_VERSION`, `PROJECT_VERSION` |
 | `--server` | | 要部署到的服务器别名 | | `PLUGIN_SERVER`, `DEVOPS_SERVER`, `SERVER` |
 | `--notify-user` | | 部署时要通知的用户 | | `PLUGIN_NOTIFY_USER`, `DEVOPS_NOTIFY_USER`, `NOTIFY_USER` |
+| `--wait` | | 等待部署完成 | `false` | `PLUGIN_WAIT`, `DEVOPS_WAIT`, `WAIT` |
 | `--debug` | | 启用调试模式 | `false` | `PLUGIN_DEBUG`, `DEVOPS_DEBUG`, `DEBUG` |
 | `--version` | `-v` | 显示版本信息 | | |
 | `--help` | `-h` | 显示帮助信息 | | |
 
 ## 示例
 
-### 部署程序
+### 部署程序并等待完成
 
 ```bash
 ./devops-plugin \
@@ -70,6 +72,7 @@
   --project-version 4.32 \
   --server dev2-zd1-erp-chain \
   --notify-user user1,user2 \
+  --wait \
   --debug
 ```
 

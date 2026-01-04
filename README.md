@@ -9,6 +9,7 @@ A Go-based CLI tool for interacting with the smartpos.top DevOps API. This plugi
 - **Version Management**: Query available versions with fuzzy matching support
 - **Server Management**: List servers and validate server existence
 - **Deployment**: Deploy programs to specified servers with automatic notification memo generation
+- **Deployment Waiting**: Wait for deployment tasks to complete with configurable timeout
 - **Structured Logging**: Detailed logging with different log levels
 - **Custom Error Handling**: Consistent error messages with error codes
 - **Environment Variable Support**: Configure the plugin using environment variables
@@ -52,13 +53,14 @@ A Go-based CLI tool for interacting with the smartpos.top DevOps API. This plugi
 | `--project-version` | | Project version to check or deploy | | `PLUGIN_PROJECT_VERSION`, `DEVOPS_PROJECT_VERSION`, `PROJECT_VERSION` |
 | `--server` | | Server alias to deploy to | | `PLUGIN_SERVER`, `DEVOPS_SERVER`, `SERVER` |
 | `--notify-user` | | Users to notify on deployment | | `PLUGIN_NOTIFY_USER`, `DEVOPS_NOTIFY_USER`, `NOTIFY_USER` |
+| `--wait` | | Wait for deployment to complete | `false` | `PLUGIN_WAIT`, `DEVOPS_WAIT`, `WAIT` |
 | `--debug` | | Enable debug mode | `false` | `PLUGIN_DEBUG`, `DEVOPS_DEBUG`, `DEBUG` |
 | `--version` | `-v` | Show version information | | |
 | `--help` | `-h` | Show help information | | |
 
 ## Examples
 
-### Deploy a Program
+### Deploy a Program and Wait for Completion
 
 ```bash
 ./devops-plugin \
@@ -70,6 +72,7 @@ A Go-based CLI tool for interacting with the smartpos.top DevOps API. This plugi
   --project-version 4.32 \
   --server dev2-zd1-erp-chain \
   --notify-user user1,user2 \
+  --wait \
   --debug
 ```
 
