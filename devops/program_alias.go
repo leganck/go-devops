@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go-devops/internal/logger"
 	"io"
-	"log"
 	"net/url"
 
 	"github.com/yassinebenaid/godump"
@@ -53,12 +53,12 @@ func (d *DevOps) GetProgramAliases(ctx context.Context, req *ProgramAliasRequest
 	}
 
 	// Optional: Debug dump full response
-	if d.Debug && len(programAliases) > 0 {
-		log.Println("=== Debug Mode: Program Alias Data ===")
+	if d.Debug {
+		logger.Debug("=== Debug Mode: Program Alias Data ===")
 		if err := godump.Dump(programAliases); err != nil {
-			log.Printf("warning: failed to dump program aliases: %v", err)
+			logger.Warningf("failed to dump program aliases: %v", err)
 		}
-		log.Println("====================================")
+		logger.Debug("====================================")
 	}
 
 	return programAliases, nil

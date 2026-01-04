@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go-devops/internal/logger"
 	"io"
-	"log"
 	"net/url"
 	"strconv"
 )
@@ -14,62 +14,51 @@ import (
 // It includes pagination and filtering parameters
 
 type DeployHistoryRequest struct {
-	Page          int    // Page number
-	Limit         int    // Number of items per page
-	EnvName       string // Environment name filter
-	DeployStatus  string // Deployment status filter
-	Condition     string // Search condition
+	Page         int    // Page number
+	Limit        int    // Number of items per page
+	EnvName      string // Environment name filter
+	DeployStatus string // Deployment status filter
+	Condition    string // Search condition
 }
 
 // DeployHistoryItem represents a single deploy history entry
 
 type DeployHistoryItem struct {
-	ID             string  `json:"id"`
-	Deleted        bool    `json:"deleted"`
-	Memo           string  `json:"memo"`
-	CreatedId      string  `json:"createdId"`
-	CreatedBy      string  `json:"createdBy"`
-	UpdatedId      int64   `json:"updatedId"`
-	UpdatedBy      string  `json:"updatedBy"`
-	CreatedAt      int64   `json:"createdAt"`
-	UpdatedAt      int64   `json:"updatedAt"`
-	DeletedAt      *int64  `json:"deletedAt"`
-	ServerId       string  `json:"serverId"`
-	UserId         string  `json:"userId"`
-	DeployStatus   int     `json:"deployStatus"`
-	DeployDesc     string  `json:"deployDesc"`
-	DeployTime     int64   `json:"deployTime"`
-	RealTime       int64   `json:"realTime"`
-	RegularTime    *string `json:"regularTime"`
-	TaskUuid       string  `json:"taskUuid"`
-	Notify         string  `json:"notify"`
-	RelativePath   string  `json:"relativePath"`
-	ProgramType    string  `json:"programType"`
-	ProgramVersion string  `json:"programVersion"`
-	Redeploy       int     `json:"redeploy"`
-	DumpMemory     int     `json:"dumpMemory"`
-	EnvName        string  `json:"envName"`
-	GroupName      string  `json:"groupName"`
+	ID               string `json:"id"`
+	CreatedAt        int64  `json:"createdAt"`
+	UpdatedAt        int64  `json:"updatedAt"`
+	ServerId         string `json:"serverId"`
+	UserId           string `json:"userId"`
+	DeployStatus     int    `json:"deployStatus"`
+	DeployDesc       string `json:"deployDesc"`
+	DeployTime       int64  `json:"deployTime"`
+	TaskUuid         string `json:"taskUuid"`
+	Notify           string `json:"notify"`
+	RelativePath     string `json:"relativePath"`
+	ProgramType      string `json:"programType"`
+	ProgramVersion   string `json:"programVersion"`
+	EnvName          string `json:"envName"`
+	GroupName        string `json:"groupName"`
 	ProgramAliasName string `json:"programAliasName"`
-	ServerAlias    string  `json:"serverAlias"`
-	Nickname       string  `json:"nickname"`
+	ServerAlias      string `json:"serverAlias"`
+	Nickname         string `json:"nickname"`
 }
 
 // DeployHistoryResponse represents the response from deploy history API
 
 type DeployHistoryResponse struct {
-	Code    string                `json:"code"`
-	Msg     string                `json:"msg"`
-	Count   int                   `json:"count"`
-	Data    []DeployHistoryItem   `json:"data"`
-	TotalRow interface{}          `json:"totalRow"`
+	Code     string              `json:"code"`
+	Msg      string              `json:"msg"`
+	Count    int                 `json:"count"`
+	Data     []DeployHistoryItem `json:"data"`
+	TotalRow interface{}         `json:"totalRow"`
 }
 
 // DeployHistoryResult represents the complete result from GetDeployHistory method
 
 type DeployHistoryResult struct {
-	Count int                   `json:"count"`
-	Data  []DeployHistoryItem   `json:"data"`
+	Count int                 `json:"count"`
+	Data  []DeployHistoryItem `json:"data"`
 }
 
 // GetDeployHistory retrieves the deployment history with optional filters
@@ -83,18 +72,18 @@ func (d *DevOps) GetDeployHistory(ctx context.Context, req *DeployHistoryRequest
 	if checkEnv == "" {
 		checkEnv = "*" // Use wildcard if no environment is specified
 	}
-	
-	if !d.hasPermission("deployHistory:page", checkEnv) {
-		return nil, fmt.Errorf("permission denied: missing deployHistory:page permission")
+
+	if !d.hasPermission("deployHistory:list", checkEnv) {
+		return nil, fmt.Errorf("permission denied: missing deployHistory:list permission")
 	}
 
 	// Build query parameters
 	params := url.Values{}
-	
+
 	// Add pagination parameters
 	params.Add("page", strconv.Itoa(req.Page))
 	params.Add("limit", strconv.Itoa(req.Limit))
-	
+
 	// Add optional filters
 	if req.EnvName != "" {
 		params.Add("envName", req.EnvName)
@@ -137,9 +126,9 @@ func (d *DevOps) GetDeployHistory(ctx context.Context, req *DeployHistoryRequest
 
 	// Optional: Debug dump full response
 	if d.Debug {
-		log.Println("=== Debug Mode: Deploy History Response ===")
-		log.Printf("Deploy history response: %s", string(body))
-		log.Println("============================================")
+		logger.Debug("=== Debug Mode: Deploy History Response ===")
+		logger.Debugf("Deploy history response: %s", string(body))
+		logger.Debug("=============================================")
 	}
 
 	// Return the result

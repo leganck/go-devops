@@ -6,7 +6,6 @@ import (
 	"go-devops/devops"
 	"go-devops/internal/errors"
 	"go-devops/internal/logger"
-	"go-devops/internal/utils"
 	"go-devops/internal/version"
 	"time"
 
@@ -75,7 +74,7 @@ func (p *Plugin) initClient() error {
 		}{
 			BaseURL:      p.BaseURL,
 			Username:     p.Username,
-			Password:     utils.MaskToken(p.Password),
+			Password:     MaskToken(p.Password),
 			ProgramAlias: p.ProgramAlias,
 			ProgramType:  p.ProgramType,
 			Env:          p.Env,
@@ -323,7 +322,8 @@ func (p *Plugin) waitForDeployment(ctx context.Context, taskUUID string) error {
 
 	// Wait for the task to complete
 	logger.Infof("Waiting for task %s to complete...", taskUUID)
-	_, err := p.client.WaitForDeployCompletion(ctx, taskUUID, 5*time.Second, 5*time.Minute)
+	// Let WaitForDeployCompletion handle timeout using the provided context
+	err := p.client.WaitForDeployCompletion(ctx, taskUUID, 10*time.Second, 3*time.Minute)
 	if err != nil {
 		return errors.NewDeploymentError("failed to wait for task completion", err)
 	}
@@ -386,4 +386,10 @@ func (p *Plugin) Exec(ctx context.Context) error {
 	}
 
 	return nil
+}
+func MaskToken(token string) string {
+	if token == "" {
+		return ""
+	}
+	return "***MASKED***"
 }

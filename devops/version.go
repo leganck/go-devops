@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go-devops/internal/logger"
 	"io"
-	"log"
 	"net/url"
 
 	"github.com/yassinebenaid/godump"
@@ -65,12 +65,12 @@ func (d *DevOps) GetVersion(ctx context.Context, req *VersionRequest) ([]Version
 	}
 
 	// Optional: Debug dump full response
-	if d.Debug && len(versions) > 0 {
-		log.Println("=== Debug Mode: Version Data ===")
+	if d.Debug {
+		logger.Debug("=== Debug Mode: Version Data ===")
 		if err := godump.Dump(versions); err != nil {
-			log.Printf("warning: failed to dump versions: %v", err)
+			logger.Warningf("failed to dump versions: %v", err)
 		}
-		log.Println("==============================")
+		logger.Debug("==============================")
 	}
 
 	return versions, nil

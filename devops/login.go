@@ -9,8 +9,8 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"go-devops/internal/logger"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -115,16 +115,16 @@ func (d *DevOps) Login(ctx context.Context) error {
 	d.Authorities = &loginData.Authorities
 
 	if d.Debug {
-		log.Printf("[DEBUG] Login success: redirect=%q, menus=%d, authorities=%d",
+		logger.Debugf("[DEBUG] Login success: redirect=%q, menus=%d, authorities=%d",
 			loginData.RedirectURL,
 			len(loginData.UserMenu),
 			len(loginData.Authorities))
 		// Optional: Debug dump full response
-		log.Println("=== Debug Mode: Login Data ===")
+		logger.Debug("=== Debug Mode: Login Data ===")
 		if err := godump.Dump(loginData); err != nil {
-			log.Printf("warning: failed to dump login data: %v", err)
+			logger.Warningf("failed to dump login data: %v", err)
 		}
-		log.Println("==============================")
+		logger.Debug("==============================")
 	}
 
 	return nil

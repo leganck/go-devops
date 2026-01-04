@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go-devops/internal/logger"
 	"io"
-	"log"
 	"net/url"
 
 	"github.com/yassinebenaid/godump"
@@ -61,12 +61,12 @@ func (d *DevOps) GetServers(ctx context.Context, req *ServerRequest) ([][]Server
 	}
 
 	// Optional: Debug dump full response
-	if d.Debug && len(servers) > 0 {
-		log.Println("=== Debug Mode: Server Data ===")
+	if d.Debug {
+		logger.Debug("=== Debug Mode: Server Data ===")
 		if err := godump.Dump(servers); err != nil {
-			log.Printf("warning: failed to dump servers: %v", err)
+			logger.Warningf("failed to dump servers: %v", err)
 		}
-		log.Println("=============================")
+		logger.Debug("=============================")
 	}
 
 	return servers, nil

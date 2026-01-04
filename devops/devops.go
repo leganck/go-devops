@@ -5,7 +5,7 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
-	"log"
+	"go-devops/internal/logger"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -67,12 +67,17 @@ func (d *DevOps) hasPermission(permission, env string) bool {
 	}
 
 	for _, auth := range *d.Authorities {
-		if auth.Permission == permission {
-			// Check if env is in Envs list
-			for _, allowedEnv := range auth.Envs {
-				if allowedEnv == env {
-					return true
-				}
+		if auth.Permission != permission {
+			continue
+		}
+		// Allow all environments if Envs is empty
+		if len(auth.Envs) == 0 {
+			return true
+		}
+		// Check if env is allowed
+		for _, allowedEnv := range auth.Envs {
+			if allowedEnv == env {
+				return true
 			}
 		}
 	}
@@ -90,7 +95,7 @@ func (d *DevOps) sendRequest(req *http.Request) (*http.Response, error) {
 	return d.Client.Do(req)
 }
 
-// get performs a GET request
+// get performs a GET request with independent timeout control
 func (d *DevOps) get(ctx context.Context, path string) (*http.Response, error) {
 	u := d.buildURL(path)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
@@ -98,14 +103,15 @@ func (d *DevOps) get(ctx context.Context, path string) (*http.Response, error) {
 		return nil, err
 	}
 	if d.Debug {
-		log.Printf("[DEBUG] GET %s", u)
+		logger.Debugf("[DEBUG] GET %s", u)
 	}
 	return d.sendRequest(req)
 }
 
-// postForm performs a POST with url.Values
+// postForm performs a POST with url.Values and independent timeout control
 func (d *DevOps) postForm(ctx context.Context, path string, data url.Values) (*http.Response, error) {
 	u := d.buildURL(path)
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, err
@@ -120,7 +126,7 @@ func (d *DevOps) postForm(ctx context.Context, path string, data url.Values) (*h
 				masked[k] = v
 			}
 		}
-		log.Printf("[DEBUG] POST %s ← %s", u, masked.Encode())
+		logger.Debugf("[DEBUG] POST %s ← %s", u, masked.Encode())
 	}
 	return d.sendRequest(req)
 }

@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go-devops/internal/logger"
 	"io"
-	"log"
 	"net/url"
 )
 
@@ -74,11 +74,11 @@ func (d *DevOps) Deploy(ctx context.Context, req *DeployRequest) error {
 
 	// Optional: Debug dump full response
 	if d.Debug {
-		log.Println("=== Debug Mode: Deploy Response ===")
-		log.Printf("Deploy response: %s", string(body))
-		log.Println("===================================")
+		logger.Debug("=== Debug Mode: Deploy Response ===")
+		logger.Debugf("Deploy response: %s", string(body))
+		logger.Debug("===================================")
 	}
 
-	log.Println("OK Deployment started successfully")
+	logger.Info("OK Deployment started successfully")
 	return nil
 }
