@@ -8,6 +8,7 @@ import (
 	"go-devops/internal/logger"
 	"go-devops/internal/utils"
 	"go-devops/internal/version"
+	"time"
 
 	"github.com/yassinebenaid/godump"
 )
@@ -26,6 +27,7 @@ type Plugin struct {
 	Server         string         // Server alias to deploy to
 	NotifyUser     string         // Users to notify on deployment
 	Debug          bool           // Enable debug mode
+	Wait           bool           // Wait for deployment to complete
 	client         *devops.DevOps // Internal DevOps client (not exposed)
 }
 
@@ -151,25 +153,22 @@ func (p *Plugin) getServers(ctx context.Context) (string, error) {
 
 	// Find server ID for the specified server alias
 	var serverID string
-	found := false
 
 	// If only one server exists, use it regardless of the specified server alias
 	if len(allServers) == 1 {
 		serverID = allServers[0].ServerID
-		found = true
 		logger.Infof("Note: Only one server found, using server %s (ID: %s) regardless of specified server alias", allServers[0].ServerAlias, allServers[0].ServerID)
 	} else {
 		// Multiple servers exist, find the specified one
 		for _, server := range allServers {
 			if server.ServerAlias == p.Server {
 				serverID = server.ServerID
-				found = true
 				break
 			}
 		}
 	}
 
-	if !found {
+	if serverID == "" {
 		return "", errors.NewServerError(fmt.Sprintf("server ID not found for server %s", p.Server), nil)
 	}
 
@@ -234,13 +233,13 @@ func (p *Plugin) queryVersion(ctx context.Context) (string, error) {
 	return versionPath, nil
 }
 
-// deploy deploys the program to the specified server
-func (p *Plugin) deploy(ctx context.Context, versionPath string, serverID string) error {
+// deploy deploys the program to the specified server and returns the task UUID
+func (p *Plugin) deploy(ctx context.Context, versionPath string, serverID string) (string, error) {
 	logger.Infof("Preparing deployment...")
 
 	// Validate deployment parameters
 	if versionPath == "" {
-		return errors.NewValidationError("version path not found for deployment", nil)
+		return "", errors.NewValidationError("version path not found for deployment", nil)
 	}
 
 	// Prepare deploy request
@@ -267,10 +266,68 @@ func (p *Plugin) deploy(ctx context.Context, versionPath string, serverID string
 	// Execute deployment
 	logger.Infof("Deploying version %s to server %s...", p.ProjectVersion, p.Server)
 	if err := p.client.Deploy(ctx, deployReq); err != nil {
-		return errors.NewDeploymentError("deploy failed", err)
+		return "", errors.NewDeploymentError("deploy failed", err)
 	}
 
 	logger.Infof("Deployment completed successfully")
+
+	// After deployment, query deploy history to find first non-completed task
+	logger.Infof("Querying deploy history to find non-completed tasks...")
+
+	// Prepare deploy history request
+	historyReq := &devops.DeployHistoryRequest{
+		Page:         1,
+		Limit:        10,
+		EnvName:      p.Env,
+		Condition:    p.ProgramAlias,
+		DeployStatus: "", // No status filter - we'll check status in code
+	}
+
+	// Call GetDeployHistory API
+	historyResult, err := p.client.GetDeployHistory(ctx, historyReq)
+	if err != nil {
+		logger.Warningf("Failed to get deploy history: %v", err)
+		return "", nil // Continue even if history query fails
+	}
+
+	// Find first non-completed task for the specified serverID
+	var targetTaskUUID string
+	for _, item := range historyResult.Data {
+		// Match the serverID
+		if item.ServerId == serverID {
+			// Check if status is not completed (4)
+			if item.DeployStatus != 4 {
+				targetTaskUUID = item.TaskUuid
+				logger.Infof("Found non-completed task: TaskUUID=%s, Status=%d, ServerID=%s",
+					targetTaskUUID, item.DeployStatus, item.ServerId)
+				break // Found the first one, exit loop
+			}
+		}
+	}
+
+	if targetTaskUUID != "" {
+		logger.Infof("First non-completed task UUID: %s", targetTaskUUID)
+	} else {
+		logger.Infof("No non-completed tasks found for server %s", serverID)
+	}
+
+	return targetTaskUUID, nil
+}
+
+// waitForDeployment waits for a deployment task to complete using taskUUID
+func (p *Plugin) waitForDeployment(ctx context.Context, taskUUID string) error {
+	if taskUUID == "" {
+		logger.Infof("No task UUID provided, skipping wait")
+		return nil
+	}
+
+	// Wait for the task to complete
+	logger.Infof("Waiting for task %s to complete...", taskUUID)
+	_, err := p.client.WaitForDeployCompletion(ctx, taskUUID, 5*time.Second, 5*time.Minute)
+	if err != nil {
+		return errors.NewDeploymentError("failed to wait for task completion", err)
+	}
+
 	return nil
 }
 
@@ -316,9 +373,14 @@ func (p *Plugin) Exec(ctx context.Context) error {
 		return err
 	}
 
-	// Deploy the program if project version and server are provided
-	if p.ProjectVersion != "" && serverID != "" {
-		if err := p.deploy(ctx, versionPath, serverID); err != nil {
+	// Deploy the program
+	taskUUID, err := p.deploy(ctx, versionPath, serverID)
+	if err != nil {
+		return err
+	}
+	// Wait for deployment to complete if Wait flag is true
+	if p.Wait {
+		if err := p.waitForDeployment(ctx, taskUUID); err != nil {
 			return err
 		}
 	}

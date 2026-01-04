@@ -98,6 +98,11 @@ func main() {
 			Usage:   "enable debug mode to show detailed information",
 			EnvVars: []string{"PLUGIN_DEBUG", "DEVOPS_DEBUG", "DEBUG"},
 		},
+		&cli.BoolFlag{
+			Name:    "wait",
+			Usage:   "wait for deployment to complete",
+			EnvVars: []string{"PLUGIN_WAIT", "DEVOPS_WAIT", "WAIT"},
+		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
@@ -121,6 +126,7 @@ func run(c *cli.Context) error {
 		Server:         c.String("server"),
 		NotifyUser:     c.String("notify-user"),
 		Debug:          c.Bool("debug"),
+		Wait:           c.Bool("wait"),
 	}
 
 	// Use context with timeout
