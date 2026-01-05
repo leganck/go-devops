@@ -10,15 +10,12 @@ import (
 )
 
 func (d *DevOps) checkDeployStatus(ctx context.Context, taskUUID string) error {
-	reqCtx, reqCancel := context.WithTimeout(ctx, 15*time.Second)
-	defer reqCancel()
-
 	historyReq := &DeployHistoryRequest{
 		Page:  1,
 		Limit: 10,
 	}
 
-	historyResult, err := d.GetDeployHistory(reqCtx, historyReq)
+	historyResult, err := d.GetDeployHistory(ctx, historyReq)
 	if err != nil {
 		return fmt.Errorf("failed to get deploy history: %w", err)
 	}

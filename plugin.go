@@ -34,49 +34,58 @@ type Plugin struct {
 
 // Exec executes the plugin logic
 func (p *Plugin) Exec(ctx context.Context) error {
+	// Precompute common description for notifications
+	desc := fmt.Sprintf("程序 %s 版本 %s 部署到服务器 %s（环境 %s）",
+		p.ProgramAlias, p.ProjectVersion, p.Server, p.Env)
+
+	// Helper to send failure notification and return error
+	handleError := func(reason string, err error) error {
+		p.sendNotification(
+			"部署失败",
+			fmt.Sprintf("%s：%s", reason, desc),
+		)
+		return err
+	}
+
 	// Validate required parameters
 	if err := p.validateParams(); err != nil {
-		return err
+		return handleError("参数验证失败", err)
 	}
 
 	// Initialize DevOps client with authentication and configuration
 	if err := p.initClient(); err != nil {
-		return err
+		return handleError("初始化客户端失败", err)
 	}
 
 	// Login to DevOps API to obtain authentication cookies
 	if err := p.login(ctx); err != nil {
-		return err
+		return handleError("登录失败", err)
 	}
 
 	// Check if the specified program exists in the given environment
 	if err := p.checkProgramExists(ctx); err != nil {
-		return err
+		return handleError("检查程序存在性失败", err)
 	}
 
 	// Query available versions and find the matching version path
 	versionPath, err := p.queryVersion(ctx)
 	if err != nil {
-		return err
+		return handleError("查询版本失败", err)
 	}
 
 	// Get server ID from the server alias (this will fail if server doesn't exist)
 	serverID, err := p.getServers(ctx)
 	if err != nil {
-		return err
+		return handleError("获取服务器ID失败", err)
 	}
 
 	// Execute deployment with retry logic
 	if err := p.executeDeploymentWithRetry(ctx, versionPath, serverID); err != nil {
-		return err
+		return handleError("执行部署失败", err)
 	}
 
 	// Final success notification
-	p.sendNotification(
-		"部署完成",
-		fmt.Sprintf("程序 %s 版本 %s 已成功部署到服务器 %s（环境 %s）",
-			p.ProgramAlias, p.ProjectVersion, p.Server, p.Env),
-	)
+	p.sendNotification("部署完成", "程序 "+p.ProgramAlias+" 版本 "+p.ProjectVersion+" 已成功部署到服务器 "+p.Server+"（环境 "+p.Env+"）")
 
 	return nil
 }
@@ -336,8 +345,8 @@ func (p *Plugin) deploy(ctx context.Context, versionPath string, serverID string
 	// Call GetDeployHistory API
 	historyResult, err := p.client.GetDeployHistory(ctx, historyReq)
 	if err != nil {
-		logger.Warningf("Failed to get deploy history: %v", err)
-		return "", nil // Continue even if history query fails
+		logger.Warningf("Failed to get deploy history: %v, continuing deployment", err)
+		return "", nil
 	}
 
 	// Find first non-completed task for the specified serverID

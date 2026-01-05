@@ -1,11 +1,11 @@
 package main
 
 import (
-	"context"
-	"github.com/joho/godotenv"
-	"github.com/urfave/cli/v2"
 	"go-devops/internal/logger"
 	"os"
+
+	"github.com/joho/godotenv"
+	"github.com/urfave/cli/v2"
 )
 
 // Version set at compile-time (e.g., go build -ldflags "-X main.Version=v1.2.3")
@@ -127,9 +127,5 @@ func run(c *cli.Context) error {
 		Wait:           c.Bool("wait"),
 	}
 
-	// Create a context that listens for system signals to allow graceful shutdown
-	ctx, cancel := context.WithCancel(c.Context)
-	defer cancel()
-
-	return plugin.Exec(ctx)
+	return plugin.Exec(c.Context)
 }

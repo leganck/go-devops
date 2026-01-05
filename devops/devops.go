@@ -48,7 +48,7 @@ func NewDevOps(auth *Auth, baseURL string, debug bool) (*DevOps, error) {
 
 	client := &http.Client{
 		Jar:       jar,
-		Timeout:   15 * time.Second,
+		Timeout:   60 * time.Second,
 		Transport: &http.Transport{},
 	}
 
