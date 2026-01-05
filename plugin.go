@@ -9,6 +9,7 @@ import (
 	"go-devops/internal/version"
 	"time"
 
+	"github.com/gen2brain/beeep"
 	"github.com/yassinebenaid/godump"
 )
 
@@ -313,19 +314,35 @@ func (p *Plugin) deploy(ctx context.Context, versionPath string, serverID string
 	return targetTaskUUID, nil
 }
 
+// sendNotification sends a desktop notification with Chinese content
+func (p *Plugin) sendNotification(title, body string) {
+	// Set application name for notification
+	beeep.AppName = "Go DevOps 插件"
+
+	// Send desktop notification
+	if err := beeep.Notify(title, body, ""); err != nil {
+		logger.Warningf("发送通知失败: %v", err)
+	}
+}
+
 // waitForDeployment waits for a deployment task to complete using taskUUID
 func (p *Plugin) waitForDeployment(ctx context.Context, taskUUID string) error {
 	if taskUUID == "" {
-		logger.Infof("No task UUID provided, skipping wait")
+		logger.Infof("没有任务UUID，跳过等待")
 		return nil
 	}
 
 	// Wait for the task to complete
-	logger.Infof("Waiting for task %s to complete...", taskUUID)
+	logger.Infof("等待任务 %s 完成...", taskUUID)
 	// Let WaitForDeployCompletion handle timeout using the provided context
 	err := p.client.WaitForDeployCompletion(ctx, taskUUID, 10*time.Second, 3*time.Minute)
 	if err != nil {
-		return errors.NewDeploymentError("failed to wait for task completion", err)
+		// Send failure notification
+		notificationTitle := "部署等待失败"
+		notificationBody := fmt.Sprintf("程序 %s 版本 %s 部署到服务器 %s（环境 %s）等待超时或失败\n错误信息：%v",
+			p.ProgramAlias, p.ProjectVersion, p.Server, p.Env, err)
+		p.sendNotification(notificationTitle, notificationBody)
+		return errors.NewDeploymentError("等待任务完成失败", err)
 	}
 
 	return nil
@@ -385,8 +402,15 @@ func (p *Plugin) Exec(ctx context.Context) error {
 		}
 	}
 
+	// Send success notification after deployment (or after waiting if enabled)
+	notificationTitle := "部署完成"
+	notificationBody := fmt.Sprintf("程序 %s 版本 %s 已成功部署到服务器 %s（环境 %s）",
+		p.ProgramAlias, p.ProjectVersion, p.Server, p.Env)
+	p.sendNotification(notificationTitle, notificationBody)
+
 	return nil
 }
+
 func MaskToken(token string) string {
 	if token == "" {
 		return ""
