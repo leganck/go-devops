@@ -15,7 +15,7 @@ func (d *DevOps) checkDeployStatus(ctx context.Context, taskUUID string) error {
 
 	historyReq := &DeployHistoryRequest{
 		Page:  1,
-		Limit: 20,
+		Limit: 10,
 	}
 
 	historyResult, err := d.GetDeployHistory(reqCtx, historyReq)
@@ -62,7 +62,7 @@ func (d *DevOps) checkDeployStatus(ctx context.Context, taskUUID string) error {
 }
 
 var (
-	ErrTaskInProgress = fmt.Errorf("task is still in progress")
+	ErrTaskInProgress      = fmt.Errorf("task is still in progress")
 	ErrSSHDeploymentFailed = fmt.Errorf("ssh deployment failed")
 )
 
@@ -83,15 +83,12 @@ func (d *DevOps) WaitForDeployCompletion(ctx context.Context, taskUUID string, p
 			if err == nil {
 				logger.Infof("task %s completed successfully", taskUUID)
 				return nil
-			}else if errors.Is(err, ErrTaskInProgress) {
+			} else if errors.Is(err, ErrTaskInProgress) {
 				continue
-			} else {
-				return fmt.Errorf("task %s: unexpected error: %w", taskUUID, err)
+			} else if errors.Is(err, ErrSSHDeploymentFailed) {
+				return ErrSSHDeploymentFailed
 			}
-
-			// 🟡 Non-in-progress error (e.g., API down, task failed, auth issue)
-			logger.Warningf("task %s: encountered error during polling, will retry: %v", taskUUID, err)
-
+			return fmt.Errorf("task %s: unexpected error: %w", taskUUID, err)
 		case <-waitCtx.Done():
 			logger.Errorf("task %s: wait aborted due to timeout or context cancellation", taskUUID)
 			return fmt.Errorf("wait for task %s aborted: %w", taskUUID, waitCtx.Err())

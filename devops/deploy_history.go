@@ -63,17 +63,9 @@ type DeployHistoryResult struct {
 
 // GetDeployHistory retrieves the deployment history with optional filters
 // It returns the deploy history items and the total count
-
 func (d *DevOps) GetDeployHistory(ctx context.Context, req *DeployHistoryRequest) (*DeployHistoryResult, error) {
 	// Check permission
-	// Note: We're using a default environment check since envName might be empty in the request
-	// If envName is provided, we'll use that for permission check
-	checkEnv := req.EnvName
-	if checkEnv == "" {
-		checkEnv = "*" // Use wildcard if no environment is specified
-	}
-
-	if !d.hasPermission("deployHistory:list", checkEnv) {
+	if !d.hasPermission("deployHistory:list", req.EnvName) {
 		return nil, fmt.Errorf("permission denied: missing deployHistory:list permission")
 	}
 

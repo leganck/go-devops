@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	stdErrors "errors"
 	"fmt"
 	"go-devops/devops"
 	"go-devops/internal/errors"
@@ -29,6 +30,55 @@ type Plugin struct {
 	Debug          bool           // Enable debug mode
 	Wait           bool           // Wait for deployment to complete
 	client         *devops.DevOps // Internal DevOps client (not exposed)
+}
+
+// Exec executes the plugin logic
+func (p *Plugin) Exec(ctx context.Context) error {
+	// Validate required parameters
+	if err := p.validateParams(); err != nil {
+		return err
+	}
+
+	// Initialize DevOps client with authentication and configuration
+	if err := p.initClient(); err != nil {
+		return err
+	}
+
+	// Login to DevOps API to obtain authentication cookies
+	if err := p.login(ctx); err != nil {
+		return err
+	}
+
+	// Check if the specified program exists in the given environment
+	if err := p.checkProgramExists(ctx); err != nil {
+		return err
+	}
+
+	// Query available versions and find the matching version path
+	versionPath, err := p.queryVersion(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Get server ID from the server alias (this will fail if server doesn't exist)
+	serverID, err := p.getServers(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Execute deployment with retry logic
+	if err := p.executeDeploymentWithRetry(ctx, versionPath, serverID); err != nil {
+		return err
+	}
+
+	// Final success notification
+	p.sendNotification(
+		"部署完成",
+		fmt.Sprintf("程序 %s 版本 %s 已成功部署到服务器 %s（环境 %s）",
+			p.ProgramAlias, p.ProjectVersion, p.Server, p.Env),
+	)
+
+	return nil
 }
 
 // validateParams validates required parameters
@@ -325,88 +375,57 @@ func (p *Plugin) sendNotification(title, body string) {
 	}
 }
 
-// waitForDeployment waits for a deployment task to complete using taskUUID
-func (p *Plugin) waitForDeployment(ctx context.Context, taskUUID string) error {
-	if taskUUID == "" {
-		logger.Infof("No task UUID provided, skipping wait")
-		return nil
-	}
+// executeDeploymentWithRetry executes deployment with SSH failure retry logic
+func (p *Plugin) executeDeploymentWithRetry(ctx context.Context, versionPath, serverID string) error {
+	// Maximum number of SSH deployment retries
+	const maxSSHRetry = 2
 
-	// Wait for the task to complete
-	logger.Infof("Waiting for task %s to complete...", taskUUID)
-	// Let WaitForDeployCompletion handle timeout using the provided context
-	err := p.client.WaitForDeployCompletion(ctx, taskUUID, 10*time.Second, 3*time.Minute)
-	if err != nil {
-		// Send failure notification
-		notificationTitle := "部署等待失败"
-		notificationBody := fmt.Sprintf("程序 %s 版本 %s 部署到服务器 %s（环境 %s）等待超时或失败\n错误信息：%v",
-			p.ProgramAlias, p.ProjectVersion, p.Server, p.Env, err)
-		p.sendNotification(notificationTitle, notificationBody)
-		return errors.NewDeploymentError("failed to wait for task completion", err)
-	}
-
-	return nil
-}
-
-// Exec executes the plugin logic
-// It follows a specific workflow:
-// 1. Validate required parameters
-// 2. Initialize DevOps client
-// 3. Login to DevOps API
-// 4. Check if program exists in the specified environment
-// 5. Query available versions and find the matching version
-// 6. Get server information and find the server ID
-// 7. Deploy the program if all required parameters are provided
-func (p *Plugin) Exec(ctx context.Context) error {
-	// Validate required parameters
-	if err := p.validateParams(); err != nil {
-		return err
-	}
-
-	// Initialize DevOps client with authentication and configuration
-	if err := p.initClient(); err != nil {
-		return err
-	}
-
-	// Login to DevOps API to obtain authentication cookies
-	if err := p.login(ctx); err != nil {
-		return err
-	}
-
-	// Check if the specified program exists in the given environment
-	if err := p.checkProgramExists(ctx); err != nil {
-		return err
-	}
-
-	// Query available versions and find the matching version path
-	versionPath, err := p.queryVersion(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Get server ID from the server alias (this will fail if server doesn't exist)
-	serverID, err := p.getServers(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Deploy the program
-	taskUUID, err := p.deploy(ctx, versionPath, serverID)
-	if err != nil {
-		return err
-	}
-	// Wait for deployment to complete if Wait flag is true
-	if p.Wait {
-		if err := p.waitForDeployment(ctx, taskUUID); err != nil {
+	for sshRetryCount := 0; ; sshRetryCount++ {
+		// Send retry notification (skip for first attempt)
+		if sshRetryCount > 0 {
+			p.sendNotification(
+				"重新部署开始",
+				fmt.Sprintf("开始重新部署程序 %s 版本 %s 到服务器 %s（环境 %s）...",
+					p.ProgramAlias, p.ProjectVersion, p.Server, p.Env),
+			)
+		}
+		// Deploy the program
+		taskUUID, err := p.deploy(ctx, versionPath, serverID)
+		if err != nil {
 			return err
 		}
-	}
+		// Wait for deployment if needed
+		if p.Wait {
+			waitErr := p.client.WaitForDeployCompletion(ctx, taskUUID, 10*time.Second, 3*time.Minute)
+			if waitErr == nil {
+				// Deployment succeeded
+				break
+			}
+			// Handle failure
+			if stdErrors.Is(waitErr, devops.ErrSSHDeploymentFailed) {
+				// SSH-specific failure: retry if allowed
+				if sshRetryCount < maxSSHRetry {
+					logger.Infof("SSH deployment failed, retrying... (%d/%d)", sshRetryCount+1, maxSSHRetry)
+					p.sendNotification(
+						"部署重试",
+						fmt.Sprintf("程序 %s 版本 %s 部署到服务器 %s（环境 %s）SSH失败，正在进行第 %d 次重试...",
+							p.ProgramAlias, p.ProjectVersion, p.Server, p.Env, sshRetryCount+1),
+					)
+					time.Sleep(5 * time.Second)
+					continue // retry
+				}
 
-	// Send success notification after deployment (or after waiting if enabled)
-	notificationTitle := "部署完成"
-	notificationBody := fmt.Sprintf("程序 %s 版本 %s 已成功部署到服务器 %s（环境 %s）",
-		p.ProgramAlias, p.ProjectVersion, p.Server, p.Env)
-	p.sendNotification(notificationTitle, notificationBody)
+				// No more retries left
+				logger.Errorf("SSH deployment failed after %d retries, giving up", maxSSHRetry)
+				return waitErr
+			}
+
+			// Non-SSH errors: fail fast
+			return waitErr
+		}
+		// If !p.Wait, assume success and exit
+		break
+	}
 
 	return nil
 }
