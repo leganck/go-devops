@@ -40,8 +40,7 @@ func (d *DevOps) checkDeployStatus(ctx context.Context, taskUUID string) error {
 		logger.Infof("task %s completed successfully (status: %d, description: %s)",
 			taskUUID, targetTask.DeployStatus, targetTask.DeployDesc)
 		return nil
-	case 3:
-	case 5:
+	case 3, 5:
 		logger.Errorf("task %s failed with status: %d, description: %s",
 			taskUUID, targetTask.DeployStatus, targetTask.DeployDesc)
 		return fmt.Errorf("deployment task %s failed: %s", taskUUID, targetTask.DeployDesc)
