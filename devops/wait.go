@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"go-devops/internal/logger"
+	"strings"
 	"time"
 )
 
@@ -40,7 +41,16 @@ func (d *DevOps) checkDeployStatus(ctx context.Context, taskUUID string) error {
 		logger.Infof("task %s completed successfully (status: %d, description: %s)",
 			taskUUID, targetTask.DeployStatus, targetTask.DeployDesc)
 		return nil
-	case 3, 5:
+	case 3:
+		logger.Errorf("task %s failed with status: %d, description: %s",
+			taskUUID, targetTask.DeployStatus, targetTask.DeployDesc)
+		// Check if it's an SSH error
+		if strings.Contains(strings.ToLower(targetTask.DeployDesc), "ssh") {
+			logger.Errorf("task %s failed with SSH error, will return SSH-specific error for potential retry", taskUUID)
+			return ErrSSHDeploymentFailed
+		}
+		return fmt.Errorf("deployment task %s failed: %s", taskUUID, targetTask.DeployDesc)
+	case 5:
 		logger.Errorf("task %s failed with status: %d, description: %s",
 			taskUUID, targetTask.DeployStatus, targetTask.DeployDesc)
 		return fmt.Errorf("deployment task %s failed: %s", taskUUID, targetTask.DeployDesc)
@@ -51,7 +61,10 @@ func (d *DevOps) checkDeployStatus(ctx context.Context, taskUUID string) error {
 	}
 }
 
-var ErrTaskInProgress = fmt.Errorf("task is still in progress")
+var (
+	ErrTaskInProgress = fmt.Errorf("task is still in progress")
+	ErrSSHDeploymentFailed = fmt.Errorf("ssh deployment failed")
+)
 
 func (d *DevOps) WaitForDeployCompletion(ctx context.Context, taskUUID string, pollInterval, timeout time.Duration) error {
 	logger.Infof("waiting for deployment task %s to complete (poll interval: %v, timeout: %v)...", taskUUID, pollInterval, timeout)
@@ -70,10 +83,10 @@ func (d *DevOps) WaitForDeployCompletion(ctx context.Context, taskUUID string, p
 			if err == nil {
 				logger.Infof("task %s completed successfully", taskUUID)
 				return nil
-			}
-
-			if errors.Is(err, ErrTaskInProgress) {
+			}else if errors.Is(err, ErrTaskInProgress) {
 				continue
+			} else {
+				return fmt.Errorf("task %s: unexpected error: %w", taskUUID, err)
 			}
 
 			// 🟡 Non-in-progress error (e.g., API down, task failed, auth issue)
