@@ -35,20 +35,19 @@ func (d *DevOps) checkDeployStatus(ctx context.Context, taskUUID string) error {
 		return fmt.Errorf("task %s not found in deploy history", taskUUID)
 	}
 
-	logger.Infof("task %s found with status: %d, description: %s",
-		taskUUID, targetTask.DeployStatus, targetTask.DeployDesc)
-
 	switch targetTask.DeployStatus {
 	case 4:
-		logger.Infof("task %s completed successfully", taskUUID)
+		logger.Infof("task %s completed successfully (status: %d, description: %s)",
+			taskUUID, targetTask.DeployStatus, targetTask.DeployDesc)
 		return nil
+	case 3:
 	case 5:
 		logger.Errorf("task %s failed with status: %d, description: %s",
 			taskUUID, targetTask.DeployStatus, targetTask.DeployDesc)
 		return fmt.Errorf("deployment task %s failed: %s", taskUUID, targetTask.DeployDesc)
 	default:
-		logger.Infof("task %s is still in progress (status: %d), waiting...",
-			taskUUID, targetTask.DeployStatus)
+		logger.Infof("task %s is still in progress (status: %d, description: %s), waiting...",
+			taskUUID, targetTask.DeployStatus, targetTask.DeployDesc)
 		return ErrTaskInProgress
 	}
 }

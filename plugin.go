@@ -321,19 +321,19 @@ func (p *Plugin) sendNotification(title, body string) {
 
 	// Send desktop notification
 	if err := beeep.Notify(title, body, ""); err != nil {
-		logger.Warningf("发送通知失败: %v", err)
+		logger.Warningf("Failed to send notification: %v", err)
 	}
 }
 
 // waitForDeployment waits for a deployment task to complete using taskUUID
 func (p *Plugin) waitForDeployment(ctx context.Context, taskUUID string) error {
 	if taskUUID == "" {
-		logger.Infof("没有任务UUID，跳过等待")
+		logger.Infof("No task UUID provided, skipping wait")
 		return nil
 	}
 
 	// Wait for the task to complete
-	logger.Infof("等待任务 %s 完成...", taskUUID)
+	logger.Infof("Waiting for task %s to complete...", taskUUID)
 	// Let WaitForDeployCompletion handle timeout using the provided context
 	err := p.client.WaitForDeployCompletion(ctx, taskUUID, 10*time.Second, 3*time.Minute)
 	if err != nil {
@@ -342,7 +342,7 @@ func (p *Plugin) waitForDeployment(ctx context.Context, taskUUID string) error {
 		notificationBody := fmt.Sprintf("程序 %s 版本 %s 部署到服务器 %s（环境 %s）等待超时或失败\n错误信息：%v",
 			p.ProgramAlias, p.ProjectVersion, p.Server, p.Env, err)
 		p.sendNotification(notificationTitle, notificationBody)
-		return errors.NewDeploymentError("等待任务完成失败", err)
+		return errors.NewDeploymentError("failed to wait for task completion", err)
 	}
 
 	return nil
