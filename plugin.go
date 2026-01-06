@@ -405,7 +405,7 @@ func (p *Plugin) executeDeploymentWithRetry(ctx context.Context, versionPath, se
 		}
 		// Wait for deployment if needed
 		if p.Wait {
-			waitErr := p.client.WaitForDeployCompletion(ctx, taskUUID, 10*time.Second, 3*time.Minute)
+			waitErr := p.client.WaitForDeployCompletion(ctx, taskUUID, 10*time.Second, 10*time.Minute)
 			if waitErr == nil {
 				// Deployment succeeded
 				break

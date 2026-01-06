@@ -36,3 +36,6 @@ coverage/
 # 其他临时文件
 *.tmp
 *.temp
+
+# Trae AI相关文件
+.trae/
