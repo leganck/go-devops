@@ -2,13 +2,8 @@ package devops
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"go-devops/internal/logger"
-	"io"
 	"net/url"
-
-	"github.com/yassinebenaid/godump"
 )
 
 // ServerRequest for server list query
@@ -35,38 +30,10 @@ func (d *DevOps) GetServers(ctx context.Context, req *ServerRequest) ([][]Server
 		"programAliasName": {req.ProgramAliasName},
 	}
 
-	resp, err := d.postForm(ctx, "/deployProgram/server", params)
-	if err != nil {
-		return nil, fmt.Errorf("POST /deployProgram/server: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read server response: %w", err)
-	}
-
-	var apiResp APIResponse
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return nil, fmt.Errorf("parse server JSON: %w (raw: %.200s)", err, string(body))
-	}
-
-	if !apiResp.IsSuccess() {
-		return nil, fmt.Errorf("server query error: code=%d, msg=%q", apiResp.Code, apiResp.Msg)
-	}
-
 	var servers [][]Server
-	if err := apiResp.WithData(&servers); err != nil {
-		return nil, fmt.Errorf("parse server data: %w", err)
-	}
-
-	// Optional: Debug dump full response
-	if d.Debug {
-		logger.Debug("=== Debug Mode: Server Data ===")
-		if err := godump.Dump(servers); err != nil {
-			logger.Warningf("failed to dump servers: %v", err)
-		}
-		logger.Debug("=============================")
+	err := d.PostRequest(ctx, "/deployProgram/server", params, &servers)
+	if err != nil {
+		return nil, err
 	}
 
 	return servers, nil

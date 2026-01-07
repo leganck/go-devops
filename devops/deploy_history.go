@@ -2,10 +2,7 @@ package devops
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"go-devops/internal/logger"
-	"io"
 	"net/url"
 	"strconv"
 )
@@ -66,7 +63,7 @@ type DeployHistoryResult struct {
 func (d *DevOps) GetDeployHistory(ctx context.Context, req *DeployHistoryRequest) (*DeployHistoryResult, error) {
 	// Check permission
 	if !d.hasPermission("deployHistory:list", req.EnvName) {
-		return nil, fmt.Errorf("permission denied: missing deployHistory:list permission")
+		return nil, fmt.Errorf("permission denied: missing deployHistory:list permission for environment %s", req.EnvName)
 	}
 
 	// Build query parameters
@@ -87,40 +84,12 @@ func (d *DevOps) GetDeployHistory(ctx context.Context, req *DeployHistoryRequest
 		params.Add("condition", req.Condition)
 	}
 
-	// Make the GET request
-	resp, err := d.get(ctx, "/deployHistory/list?"+params.Encode())
-	if err != nil {
-		return nil, fmt.Errorf("GET /deployHistory/list: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read and parse the response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read deploy history response: %w", err)
-	}
-
-	// Parse the API response envelope
-	var apiResp APIResponse
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return nil, fmt.Errorf("parse deploy history JSON: %w (raw: %.200s)", err, string(body))
-	}
-
-	if !apiResp.IsSuccess() {
-		return nil, fmt.Errorf("deploy history error: code=%d, msg=%q", apiResp.Code, apiResp.Msg)
-	}
-
-	// Parse the inner data structure
+	// Make the GET request with query parameters
+	path := "/deployHistory/list?" + params.Encode()
 	var historyResp DeployHistoryResponse
-	if err := json.Unmarshal(apiResp.Data, &historyResp); err != nil {
-		return nil, fmt.Errorf("parse deploy history data: %w (raw: %.200s)", err, string(apiResp.Data))
-	}
-
-	// Optional: Debug dump full response
-	if d.Debug {
-		logger.Debug("=== Debug Mode: Deploy History Response ===")
-		logger.Debugf("Deploy history response: %s", string(body))
-		logger.Debug("=============================================")
+	err := d.GetRequest(ctx, path, &historyResp)
+	if err != nil {
+		return nil, err
 	}
 
 	// Return the result

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"go-devops/internal/logger"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -28,24 +29,21 @@ type Auth struct {
 
 // DevOps represents a DevOps client (Jenkins-style)
 type DevOps struct {
-	Auth    *Auth
-	BaseURL string
-	Client  *http.Client
-	Debug   bool
-	pubKey  *rsa.PublicKey // cached
-
+	Auth        *Auth
+	BaseURL     string
+	Client      *http.Client
+	Debug       bool
+	pubKey      *rsa.PublicKey // cached
 	Authorities *map[string]Authority
 }
 
 // NewDevOps creates a new DevOps client
 func NewDevOps(auth *Auth, baseURL string, debug bool) (*DevOps, error) {
 	baseURL = strings.TrimRight(baseURL, "/")
-
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return nil, fmt.Errorf("create cookie jar: %w", err)
 	}
-
 	client := &http.Client{
 		Jar:       jar,
 		Timeout:   60 * time.Second,
@@ -62,6 +60,14 @@ func NewDevOps(auth *Auth, baseURL string, debug bool) (*DevOps, error) {
 
 // hasPermission checks if user has specified permission for given environment
 func (d *DevOps) hasPermission(permission, env string) bool {
+	// Create a cache key combining permission and environment
+	// If not cached, compute the result
+	result := d.computePermission(permission, env)
+	return result
+}
+
+// computePermission performs the actual permission computation
+func (d *DevOps) computePermission(permission, env string) bool {
 	if d.Authorities == nil {
 		return false
 	}
@@ -129,4 +135,80 @@ func (d *DevOps) postForm(ctx context.Context, path string, data url.Values) (*h
 		logger.Debugf("[DEBUG] POST %s ← %s", u, masked.Encode())
 	}
 	return d.sendRequest(req)
+}
+
+// PostRequest performs a POST request with common error handling
+func (d *DevOps) PostRequest(ctx context.Context, path string, params url.Values, result interface{}) error {
+	resp, err := d.postForm(ctx, path, params)
+	if err != nil {
+		return fmt.Errorf("POST %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read response body: %w", err)
+	}
+
+	var apiResp APIResponse
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		return fmt.Errorf("parse JSON response: %w (raw: %.200s)", err, string(body))
+	}
+
+	if !apiResp.IsSuccess() {
+		return fmt.Errorf("API error: code=%d, msg=%q", apiResp.Code, apiResp.Msg)
+	}
+
+	if result != nil {
+		if err := apiResp.WithData(result); err != nil {
+			return fmt.Errorf("parse result data: %w", err)
+		}
+	}
+
+	// Optional: Debug dump full response
+	if d.Debug {
+		logger.Debugf("=== Debug Mode: %s Response ===", path)
+		logger.Debugf("Response: %s", string(body))
+		logger.Debug("==============================")
+	}
+
+	return nil
+}
+
+// GetRequest performs a GET request with common error handling
+func (d *DevOps) GetRequest(ctx context.Context, path string, result interface{}) error {
+	resp, err := d.get(ctx, path)
+	if err != nil {
+		return fmt.Errorf("GET %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read response body: %w", err)
+	}
+
+	var apiResp APIResponse
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		return fmt.Errorf("parse JSON response: %w (raw: %.200s)", err, string(body))
+	}
+
+	if !apiResp.IsSuccess() {
+		return fmt.Errorf("API error: code=%d, msg=%q", apiResp.Code, apiResp.Msg)
+	}
+
+	if result != nil {
+		if err := apiResp.WithData(result); err != nil {
+			return fmt.Errorf("parse result data: %w", err)
+		}
+	}
+
+	// Optional: Debug dump full response
+	if d.Debug {
+		logger.Debugf("=== Debug Mode: %s Response ===", path)
+		logger.Debugf("Response: %s", string(body))
+		logger.Debug("==============================")
+	}
+
+	return nil
 }

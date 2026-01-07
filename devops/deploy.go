@@ -2,10 +2,7 @@ package devops
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"go-devops/internal/logger"
-	"io"
 	"net/url"
 )
 
@@ -52,33 +49,10 @@ func (d *DevOps) Deploy(ctx context.Context, req *DeployRequest) error {
 		params.Add("notifyMemo", req.NotifyMemo)
 	}
 
-	resp, err := d.postForm(ctx, "/deployProgram/start", params)
+	err := d.PostRequest(ctx, "/deployProgram/start", params, nil)
 	if err != nil {
-		return fmt.Errorf("POST /deployProgram/start: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("read deploy response: %w", err)
+		return err
 	}
 
-	var apiResp APIResponse
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return fmt.Errorf("parse deploy JSON: %w (raw: %.200s)", err, string(body))
-	}
-
-	if !apiResp.IsSuccess() {
-		return fmt.Errorf("deploy error: code=%d, msg=%q", apiResp.Code, apiResp.Msg)
-	}
-
-	// Optional: Debug dump full response
-	if d.Debug {
-		logger.Debug("=== Debug Mode: Deploy Response ===")
-		logger.Debugf("Deploy response: %s", string(body))
-		logger.Debug("===================================")
-	}
-
-	logger.Info("OK Deployment started successfully")
 	return nil
 }

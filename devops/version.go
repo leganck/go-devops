@@ -2,13 +2,8 @@ package devops
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"go-devops/internal/logger"
-	"io"
 	"net/url"
-
-	"github.com/yassinebenaid/godump"
 )
 
 // VersionItem represents a deploy version entry
@@ -39,38 +34,10 @@ func (d *DevOps) GetVersion(ctx context.Context, req *VersionRequest) ([]Version
 		"envName":          {req.EnvName},
 	}
 
-	resp, err := d.postForm(ctx, "/deployProgram/version", params)
-	if err != nil {
-		return nil, fmt.Errorf("POST /deployProgram/version: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read version response: %w", err)
-	}
-
-	var apiResp APIResponse
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return nil, fmt.Errorf("parse version JSON: %w (raw: %.200s)", err, string(body))
-	}
-
-	if !apiResp.IsSuccess() {
-		return nil, fmt.Errorf("version query error: code=%d, msg=%q", apiResp.Code, apiResp.Msg)
-	}
-
 	var versions []VersionItem
-	if err := apiResp.WithData(&versions); err != nil {
-		return nil, fmt.Errorf("parse version  %w", err)
-	}
-
-	// Optional: Debug dump full response
-	if d.Debug {
-		logger.Debug("=== Debug Mode: Version Data ===")
-		if err := godump.Dump(versions); err != nil {
-			logger.Warningf("failed to dump versions: %v", err)
-		}
-		logger.Debug("==============================")
+	err := d.PostRequest(ctx, "/deployProgram/version", params, &versions)
+	if err != nil {
+		return nil, err
 	}
 
 	return versions, nil
