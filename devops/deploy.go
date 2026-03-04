@@ -6,7 +6,9 @@ import (
 	"net/url"
 )
 
-// DeployRequest 包含启动部署的参数
+// DeployRequest 包含启动部署的参数。
+//
+// 该结构体包含部署所需的所有信息，包括目标程序、版本、服务器和通知设置。
 type DeployRequest struct {
 	ProgramAliasName string `json:"programAliasName"` // 程序别名标识符
 	ProgramType      string `json:"programType"`      // 程序类型（例如 "snapshots"、"releases"）
@@ -19,9 +21,24 @@ type DeployRequest struct {
 	ProgramVersion   string `json:"programVersion"`   // 版本标识符
 }
 
-// Deploy 启动程序版本到指定服务器的部署
-// 如果 NotifyUser 不为空，通知参数将被添加到请求中。
-// 需要对指定环境具有 "deployProgram:page" 权限。
+// Deploy 启动程序版本到指定服务器的部署。
+//
+// 该方法向 DevOps API 发送部署请求，启动异步部署任务。
+// 如果指定了 NotifyUser，部署完成后会通知相关用户。
+//
+// 权限要求：
+//   需要对指定环境具有 "deployProgram:page" 权限。
+//
+// 参数：
+//   - ctx: 用于控制请求生命周期的上下文
+//   - req: 包含部署目标、版本和通知设置的部署请求
+//
+// 返回：
+//   - error: 权限不足或 API 请求失败时返回错误
+//
+// 注意：
+//   该方法仅启动部署任务，不等待部署完成。
+//   使用 WaitForDeployCompletion 方法来监控部署进度。
 func (d *DevOps) Deploy(ctx context.Context, req *DeployRequest) error {
 	if !d.hasPermission("deployProgram:page", req.EnvName) {
 		return fmt.Errorf("permission denied: missing deployProgram:page permission for environment %s", req.EnvName)

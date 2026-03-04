@@ -1,3 +1,40 @@
+// Package devops 提供 DevOps API 的 Go 客户端实现。
+//
+// 该包封装了与 DevOps API 交互的所有功能，包括：
+//   - 用户认证和会话管理
+//   - 程序、服务器、版本查询
+//   - 程序部署和部署状态监控
+//   - 权限检查
+//
+// 主要类型：
+//   - DevOps: API 客户端，包含所有与 API 交互的方法
+//   - Auth: 认证凭据（用户名和密码）
+//   - Authority: 用户权限信息
+//
+// 使用示例：
+//
+//	// 创建客户端
+//	client, err := devops.NewDevOps(&devops.Auth{
+//	    Username: "user@example.com",
+//	    Password: "secret",
+//	}, "https://devops.example.com", false)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//
+//	// 登录
+//	if err := client.Login(ctx); err != nil {
+//	    log.Fatal(err)
+//	}
+//
+//	// 查询环境列表
+//	envs := client.GetEnvs()
+//
+// 权限系统：
+// 该包实现了基于权限的访问控制。每个操作都需要特定的权限：
+//   - deployProgram:page: 部署和查询权限
+//
+// 客户端会自动缓存登录后的权限信息，后续操作会检查权限。
 package devops
 
 import (
@@ -51,13 +88,18 @@ func (r *APIResponse) WithData(v interface{}) error {
 	return json.Unmarshal(r.Data, v)
 }
 
-// Auth 保存身份验证凭据
+// Auth 保存身份验证凭据。
+//
+// 该结构体包含连接到 DevOps API 所需的用户认证信息。
 type Auth struct {
 	Username string
 	Password string
 }
 
-// Authority 表示来自 API 的权限项
+// Authority 表示来自 API 的权限项。
+//
+// 每个权限项包含一个标识符、关联的环境列表和权限字符串。
+// 如果 Envs 为空，则表示该权限适用于所有环境。
 type Authority struct {
 	ID         StringOrNumber `json:"id"`
 	ParentID   StringOrNumber `json:"parentId"`
@@ -69,7 +111,10 @@ type Authority struct {
 	Child      interface{}    `json:"child"`
 }
 
-// DevOps 表示与 DevOps API 交互的客户端
+// DevOps 表示与 DevOps API 交互的客户端。
+//
+// 该结构体封装了 HTTP 客户端、认证信息和会话状态。
+// 成功登录后，权限信息会被缓存到 Authorities 字段中。
 type DevOps struct {
 	Auth        *Auth
 	BaseURL     string
@@ -79,7 +124,28 @@ type DevOps struct {
 	Authorities *map[string]Authority
 }
 
-// NewDevOps 使用给定的凭据和配置创建新的 DevOps 客户端
+// NewDevOps 使用给定的凭据和配置创建新的 DevOps 客户端。
+//
+// 该函数创建并初始化一个 DevOps 客户端实例，包括：
+//   - 验证必需的参数（auth、username、password、baseURL）
+//   - 创建 HTTP 客户端，配置连接池和超时
+//   - 初始化 Cookie 管理器以维护会话状态
+//
+// 参数：
+//   - auth: 认证凭据，包含用户名和密码
+//   - baseURL: DevOps API 的基础 URL（会自动去除末尾的斜杠）
+//   - debug: 是否启用调试模式（启用后会打印详细日志）
+//
+// 返回：
+//   - *DevOps: 初始化后的 DevOps 客户端实例
+//   - error: 参数验证失败或创建 HTTP 客户端失败时返回错误
+//
+// 示例：
+//
+//	client, err := devops.NewDevOps(&devops.Auth{
+//	    Username: "user@example.com",
+//	    Password: "secret",
+//	}, "https://devops.example.com", false)
 func NewDevOps(auth *Auth, baseURL string, debug bool) (*DevOps, error) {
 	if auth == nil {
 		return nil, fmt.Errorf("auth cannot be nil")

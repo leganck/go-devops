@@ -1,3 +1,33 @@
+// Package cmd 提供 DevOps 部署和查询工具的 CLI 命令实现。
+//
+// 该包包含以下子命令：
+//   - deploy: 部署程序到指定服务器
+//   - version: 查询程序可用版本
+//   - servers: 查询程序可用服务器
+//   - programs: 查询环境中的程序列表
+//   - envs: 查询可用的环境列表
+//
+// 全局配置选项：
+//   - host (-H): DevOps API 基础 URL
+//   - username (-u): DevOps 用户名
+//   - password (-p): DevOps 密码
+//   - debug: 启用调试模式
+//
+// 环境变量支持：
+//   配置可以通过以下环境变量设置：
+//   - DEVOPS_URL / URL: API 基础 URL
+//   - DEVOPS_USERNAME / USERNAME: 用户名
+//   - DEVOPS_PASSWORD / PASSWORD: 密码
+//   - DEVOPS_DEBUG / DEBUG: 调试模式
+//   - PLUGIN_ENV_FILE: 自定义 .env 文件路径
+//
+// 使用示例：
+//
+//	// 查询环境列表
+//	go-devops envs -u username -p password
+//
+//	// 部署程序
+//	go-devops deploy -a smartpos-svc -e dev2 -v 1.0.0 -s server1
 package cmd
 
 import (
