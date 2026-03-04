@@ -1,77 +1,64 @@
-# Go DevOps CLI Plugin
+# Go DevOps CLI
 
-A Go-based CLI tool for interacting with the smartpos.top DevOps API. This plugin allows you to login to DevOps, query deploy versions, and deploy programs to servers.
+<div align="center">
 
-## Features
+**一个现代化的 Go 语言 DevOps 部署工具**
 
-- **Authentication**: Secure login to DevOps API using username and password
-- **Program Management**: Check if programs exist in specific environments
-- **Version Management**: Query available versions with fuzzy matching support
-- **Server Management**: List servers and validate server existence
-- **Concurrent Deployment**: Deploy to multiple servers concurrently using goroutines
-- **SSH Auto-Retry**: Automatically retry deployment when SSH connection fails (up to 2 retries)
-- **Deployment Waiting**: Wait for deployment tasks to complete with configurable timeout (10 minutes default)
-- **Desktop Notifications**: Get notified on deployment start, success, failure, and retry via system notifications
-- **Structured Logging**: Detailed logging with different log levels
-- **Custom Error Handling**: Consistent error messages with error codes
-- **Environment Variable Support**: Configure the plugin using environment variables
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://golang.org/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-## Installation
+</div>
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/your-username/go-devops.git
-   cd go-devops
-   ```
+---
 
-2. **Build the plugin**:
-   ```bash
-   go build -o go-devops
-   ```
+## 简介
 
-3. **Run the plugin**:
-   ```bash
-   ./go-devops --help
-   ```
+`go-devops` 是一个基于 Go 语言开发的命令行工具，用于与 smartpos.top DevOps API 交互。它提供了一套完整的部署解决方案，支持并发部署、SSH 失败自动重试、桌面通知、版本模糊匹配等功能。
 
-## Usage
+### 核心特性
 
-### Basic Command Structure
+- **安全认证** - 支持用户名密码登录，会话自动管理
+- **并发部署** - 使用 goroutine 并发监听多个服务器部署任务
+- **智能重试** - SSH 连接失败时自动重试失败的服务器（最多 2 次）
+- **桌面通知** - 部署开始、成功、失败、重试时发送系统通知
+- **版本匹配** - 支持精确匹配和模糊匹配版本号
+- **结构化日志** - 详细的日志输出，支持调试模式
+- **环境变量** - 灵活的配置方式，支持 `.env` 文件
+- **高性能** - 基于 Go 语言的协程实现，部署效率高
+
+---
+
+## 安装
+
+### 从源码构建
 
 ```bash
-./go-devops [flags]
-./go-devops deploy [flags]
+# 克隆仓库
+git clone https://github.com/your-username/go-devops.git
+cd go-devops
+
+# 构建可执行文件
+go build -o go-devops
+
+# (可选) 安装到 GOPATH/bin
+go install
 ```
 
-### Global Flags
+### 使用预编译二进制
 
-| Flag | Short | Description | Default | Environment Variables |
-|------|-------|-------------|---------|----------------------|
-| `--host` | `-H` | DevOps base URL | `https://devops.example.com` | `DEVOPS_URL`, `URL` |
-| `--username` | `-u` | DevOps username | | `DEVOPS_USERNAME`, `USERNAME` |
-| `--password` | `-p` | DevOps password | | `DEVOPS_PASSWORD`, `PASSWORD` |
-| `--debug` | | Enable debug mode | `false` | `DEVOPS_DEBUG`, `DEBUG` |
+下载对应平台的预编译二进制文件，添加到系统 PATH 即可。
 
-### Deploy Command Flags
+---
 
-| Flag | Short | Description | Default | Environment Variables |
-|------|-------|-------------|---------|----------------------|
-| `--program-alias` | `-a` | Program alias name | | `DEVOPS_PROGRAM_ALIAS`, `PROGRAM_ALIAS` |
-| `--program-type` | `-t` | Program type (e.g. snapshots, releases) | `snapshots` | `DEVOPS_PROGRAM_TYPE`, `PROGRAM_TYPE` |
-| `--env` | `-e` | Environment name (e.g. dev2, test) | | `DEVOPS_ENV`, `ENV` |
-| `--version` | `-v` | Project version to deploy | | `DEVOPS_PROJECT_VERSION`, `PROJECT_VERSION` |
-| `--server` | `-s` | Server alias to deploy to | | `DEVOPS_SERVER`, `SERVER` |
-| `--notify` | | Users to notify on deployment | | `DEVOPS_NOTIFY_USER`, `NOTIFY_USER` |
-| `--wait` | | Wait for deployment to complete | `false` | `DEVOPS_WAIT`, `WAIT` |
+## 快速开始
 
-## Examples
-
-### Deploy to Single Server and Wait
+### 基本用法
 
 ```bash
-./go-devops deploy \
+# 部署程序到指定服务器
+go-devops deploy \
   -u admin \
-  -p password123 \
+  -p password \
   -a smartpos-svc-erp-chain \
   -e dev2 \
   -v 1.0.0 \
@@ -79,269 +66,443 @@ A Go-based CLI tool for interacting with the smartpos.top DevOps API. This plugi
   --wait
 ```
 
-### Deploy to Multiple Servers Concurrently
+### 使用环境变量
 
 ```bash
-# Deploy to all servers for the program
-./go-devops deploy \
-  -a smartpos-svc-erp-chain \
-  -e dev2 \
-  -v 1.0.0 \
-  --wait
+# 创建 .env 文件
+cat > .env << EOF
+DEVOPS_USERNAME=admin
+DEVOPS_PASSWORD=your_password
+DEVOPS_URL=https://devops.example.com
+DEVOPS_PROGRAM_ALIAS=smartpos-svc-erp-chain
+DEVOPS_ENV=dev2
+EOF
+
+# 运行命令
+go-devops deploy -e dev2 -v 1.0.0 --wait
 ```
 
-### Deploy with Desktop Notifications
+---
+
+## 命令说明
+
+### 全局选项
+
+| 选项 | 简写 | 描述 | 默认值 | 环境变量 |
+|------|------|------|--------|----------|
+| `--host` | `-H` | DevOps API 地址 | `https://devops.example.com` | `DEVOPS_URL`, `URL` |
+| `--username` | `-u` | 登录用户名 | | `DEVOPS_USERNAME`, `USERNAME` |
+| `--password` | `-p` | 登录密码 | | `DEVOPS_PASSWORD`, `PASSWORD` |
+| `--debug` | | 启用调试模式 | `false` | `DEVOPS_DEBUG`, `DEBUG` |
+
+### 子命令
+
+#### 1. `deploy` - 部署程序
+
+部署指定版本的程序到目标服务器。
 
 ```bash
-# Deployment notifications are sent automatically via system notifications
-./go-devops deploy \
-  -a my-app \
-  -e dev2 \
-  -v 1.0.0 \
-  --notify user1,user2 \
-  --wait
+go-devops deploy [选项]
 ```
 
-### Using Environment Variables
+| 选项 | 简写 | 描述 | 默认值 | 环境变量 |
+|------|------|------|--------|----------|
+| `--program-alias` | `-a` | 程序别名 | | `DEVOPS_PROGRAM_ALIAS` |
+| `--program-type` | `-t` | 程序类型 (snapshots/releases) | `snapshots` | `DEVOPS_PROGRAM_TYPE` |
+| `--env` | `-e` | 环境名称 | | `DEVOPS_ENV` |
+| `--version` | `-v` | 部署版本 | | `DEVOPS_PROJECT_VERSION` |
+| `--server` | `-s` | 目标服务器别名 | | `DEVOPS_SERVER` |
+| `--notify` | | 通知用户（逗号分隔） | | `DEVOPS_NOTIFY_USER` |
+| `--wait` | | 等待部署完成 | `false` | `DEVOPS_WAIT` |
+
+**示例：**
 
 ```bash
+# 部署到单个服务器
+go-devops deploy -a my-app -e dev2 -v 1.0.0 -s server-1 --wait
+
+# 并发部署到所有服务器
+go-devops deploy -a my-app -e dev2 -v 1.0.0 --wait
+
+# 部署并通知相关人员
+go-devops deploy -a my-app -e dev2 -v 1.0.0 --notify user1,user2 --wait
+```
+
+**并发部署与重试机制：**
+
+- 部署任务会并发执行到所有目标服务器
+- 使用 goroutine 并发监听每个服务器的部署状态
+- 当某个服务器因 **SSH 连接失败** 时，自动重试该服务器（最多 2 次）
+- 重试间隔：5 秒
+- 单个任务超时：10 分钟
+
+#### 2. `envs` - 列出环境
+
+列出所有可用的环境。
+
+```bash
+go-devops envs
+```
+
+**示例输出：**
+
+```
+可用环境列表:
+- dev (开发环境)
+- test (测试环境)
+- prod (生产环境)
+```
+
+#### 3. `programs` - 列出程序
+
+列出指定环境中的所有程序。
+
+```bash
+go-devops programs -e <环境名>
+```
+
+| 选项 | 简写 | 描述 | 环境变量 |
+|------|------|------|----------|
+| `--env` | `-e` | 环境名称 | `DEVOPS_ENV` |
+
+**示例：**
+
+```bash
+# 列出 dev2 环境的所有程序
+go-devops programs -e dev2
+```
+
+#### 4. `servers` - 列出服务器
+
+列出指定程序和环境的服务器。
+
+```bash
+go-devops servers -a <程序别名> -e <环境名>
+```
+
+| 选项 | 简写 | 描述 | 环境变量 |
+|------|------|------|----------|
+| `--program-alias` | `-a` | 程序别名 | `DEVOPS_PROGRAM_ALIAS` |
+| `--env` | `-e` | 环境名称 | `DEVOPS_ENV` |
+
+**示例：**
+
+```bash
+# 列出程序的所有服务器
+go-devops servers -a my-app -e dev2
+```
+
+#### 5. `version` - 查询版本
+
+查询指定程序的可用版本。
+
+```bash
+go-devops version -a <程序别名> -e <环境名> [-t <程序类型>]
+```
+
+| 选项 | 简写 | 描述 | 默认值 | 环境变量 |
+|------|------|------|--------|----------|
+| `--program-alias` | `-a` | 程序别名 | | `DEVOPS_PROGRAM_ALIAS` |
+| `--env` | `-e` | 环境名称 | | `DEVOPS_ENV` |
+| `--program-type` | `-t` | 程序类型 | `snapshots` | `DEVOPS_PROGRAM_TYPE` |
+
+**示例：**
+
+```bash
+# 查询 snapshots 类型版本
+go-devops version -a my-app -e dev2
+
+# 查询 releases 类型版本
+go-devops version -a my-app -e dev2 -t releases
+```
+
+---
+
+## 版本匹配
+
+工具支持**模糊版本匹配**，可以灵活指定版本号：
+
+| 指定版本 | 可匹配的实际版本 |
+|----------|------------------|
+| `4.32` | `4.32.0`, `4.32.1`, `4.32.2` |
+| `1.2` | `1.2.0`, `1.2.3`, `1.2.10` |
+| `5` | `5.0.0`, `5.1.2`, `5.2.0` |
+
+**匹配优先级：**
+
+1. **精确匹配** - 首先尝试完全匹配版本号
+2. **模糊匹配** - 精确匹配失败时，使用模糊匹配
+
+---
+
+## 桌面通知
+
+工具支持桌面通知功能，在以下情况下会自动发送通知：
+
+| 通知类型 | 触发时机 |
+|----------|----------|
+| 部署已启动 | 部署任务开始执行 |
+| 部署完成 | 所有服务器部署成功 |
+| 部署失败 | 部署任务失败 |
+| 部署部分失败 | 部分服务器部署失败 |
+| SSH 重试 | SSH 连接失败，准备重试 |
+| 重新部署开始 | 开始重新部署到失败的服务器 |
+
+通知通过系统通知中心发送，无需额外配置。
+
+---
+
+## 配置
+
+### 环境变量
+
+支持通过环境变量配置所有选项：
+
+```bash
+# 认证信息
+export DEVOPS_URL=https://devops.example.com
 export DEVOPS_USERNAME=admin
-export DEVOPS_PASSWORD=password123
-export DEVOPS_PROGRAM_ALIAS=smartpos-svc-erp-chain
+export DEVOPS_PASSWORD=your_password
+
+# 部署配置
+export DEVOPS_PROGRAM_ALIAS=my-app
 export DEVOPS_ENV=dev2
+export DEVOPS_PROGRAM_TYPE=snapshots
 export DEVOPS_PROJECT_VERSION=1.0.0
 
-./go-devops deploy --wait
+# 自定义 .env 文件路径
+export PLUGIN_ENV_FILE=/path/to/custom.env
+
+# 运行
+go-devops deploy --wait
 ```
 
-## Project Structure
+### .env 文件
 
-```
-go-devops/
-├── cmd/                      # CLI command implementations
-│   ├── root.go              # Root command and global flags
-│   ├── deploy.go            # Deploy command main flow
-│   ├── deploy_validate.go   # Deployment validation logic
-│   ├── deploy_execute.go    # Deployment execution logic
-│   ├── deploy_monitor.go    # Concurrent monitoring and retry
-│   ├── deploy_helpers.go    # Deployment helper functions
-│   ├── deploy_notification.go # Desktop notifications
-│   ├── envs.go              # Environment list command
-│   ├── programs.go          # Program list command
-│   ├── servers.go           # Server list command
-│   ├── version.go           # Version query command
-│   └── client.go            # Client creation
-├── devops/                  # DevOps API client
-│   ├── devops.go            # Client core
-│   ├── login.go             # Authentication
-│   ├── deploy.go            # Deployment API
-│   ├── deploy_history.go    # Deployment history
-│   ├── program_alias.go     # Program alias
-│   ├── server.go            # Server management
-│   ├── version.go           # Version management
-│   └── wait.go              # Wait for deployment completion
-├── internal/                # Internal packages
-│   ├── errors/              # Custom error types
-│   ├── logger/              # Logging management
-│   └── version/             # Version matching
-├── main.go                  # Entry point
-├── go.mod                   # Go module file
-├── README.md                # English documentation
-└── README.zh-CN.md          # Chinese documentation
-```
-
-## Concurrent Deployment and Auto-Retry
-
-### How It Works
-
-1. **Concurrent Deployment**: Deployment tasks are executed concurrently to all target servers using goroutines
-2. **Parallel Monitoring**: Each server deployment is monitored in a separate goroutine
-3. **SSH Auto-Retry**: When SSH connection fails, the deployment is automatically retried (up to 2 retries)
-4. **Retry Delay**: 5 seconds between retry attempts
-5. **Timeout**: 10 minutes per task
-
-### Notification Types
-
-- **Deployment Started**: When deployment begins
-- **Deployment Success**: When all servers complete successfully
-- **Deployment Failure**: When deployment fails
-- **Partial Failure**: When some servers fail
-- **SSH Retry**: When SSH connection fails and retry is scheduled
-- **Redeploy**: When redeploying to a failed server
-
-## Version Matching
-
-The plugin supports fuzzy version matching, which means it can match versions like:
-- `4.32.0` with `4.32`
-- `1.2.3` with `1.2`
-- `5.0.0` with `5`
-
-**Matching Priority:**
-1. **Exact Match**: First attempts to match the exact version
-2. **Fuzzy Match**: If exact match fails, uses fuzzy matching
-
-## Logging
-
-The plugin uses structured logging with different log levels:
-- **INFO**: General information about the plugin's execution
-- **DEBUG**: Detailed debugging information (enabled with `--debug` flag)
-- **WARNING**: Warnings about potential issues
-- **ERROR**: Error messages
-
-## Custom Error Types
-
-The plugin uses custom error types with error codes for consistent error handling:
-- **VALIDATION_ERROR**: Invalid parameters
-- **LOGIN_ERROR**: Login failures
-- **API_ERROR**: DevOps API failures
-- **DEPLOYMENT_ERROR**: Deployment failures
-- **VERSION_ERROR**: Version-related errors
-- **SERVER_ERROR**: Server-related errors
-
-## Development
-
-### Dependencies
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `github.com/urfave/cli/v2` | v2.27.7 | CLI framework |
-| `github.com/sirupsen/logrus` | v1.9.3 | Structured logging |
-| `github.com/joho/godotenv` | v1.5.1 | Environment variable loading |
-| `golang.org/x/sync` | v0.10.0 | Concurrency control |
-| `github.com/gen2brain/beeep` | v0.11.2 | Desktop notifications |
-| `github.com/PuerkitoBio/goquery` | v1.11.0 | HTML parsing |
-
-### Running Tests
-
-```bash
-go test ./...
-```
-
-### Building with Version Info
-
-```bash
-go build -ldflags "-X main.Version=v1.0.0" -o go-devops
-```
-
-### Cross-Platform Build
-
-```bash
-# Linux
-GOOS=linux GOARCH=amd64 go build -o go-devops-linux
-
-# Windows
-GOOS=windows GOARCH=amd64 go build -o go-devops.exe
-
-# macOS
-GOOS=darwin GOARCH=amd64 go build -o go-devops-mac
-```
-
-## Environment File Support
-
-The plugin supports loading environment variables from a `.env` file. You can specify the path to the env file using the `DEVOPS_ENV_FILE` environment variable:
-
-```bash
-export DEVOPS_ENV_FILE=.env
-./go-devops deploy -a my-app -e dev2 -v 1.0.0 --wait
-```
-
-### Example .env File
+创建 `.env` 文件加载配置：
 
 ```bash
 # .env
 DEVOPS_URL=https://devops.example.com
 DEVOPS_USERNAME=admin
 DEVOPS_PASSWORD=your_password
-DEVOPS_PROGRAM_ALIAS=smartpos-svc-erp-chain
 DEVOPS_ENV=dev2
+DEVOPS_PROGRAM_ALIAS=my-app
 ```
 
-## Best Practices
+---
 
-### 1. Use Environment Variables for Configuration
+## 日志说明
 
-Create a `.env` file to manage common configurations and avoid exposing sensitive information in the command line:
+### 日志级别
+
+| 级别 | 说明 |
+|------|------|
+| `INFO` | 常规操作信息 |
+| `WARNING` | 警告信息 |
+| `ERROR` | 错误信息 |
+| `DEBUG` | 调试信息（需启用 `--debug`） |
+
+### 启用调试模式
 
 ```bash
-# .env (do not commit to version control)
+go-devops deploy -a my-app -e dev2 -v 1.0.0 --wait --debug
+```
+
+---
+
+## 开发
+
+### 项目结构
+
+```
+go-devops/
+├── cmd/                      # CLI 命令实现
+│   ├── root.go              # 根命令和全局选项
+│   ├── deploy.go            # 部署命令主流程
+│   ├── deploy_validate.go   # 部署验证逻辑
+│   ├── deploy_execute.go    # 部署执行逻辑
+│   ├── deploy_monitor.go    # 并发监听与重试
+│   ├── deploy_helpers.go    # 部署辅助函数
+│   ├── deploy_notification.go # 桌面通知
+│   ├── envs.go              # 环境列表命令
+│   ├── programs.go          # 程序列表命令
+│   ├── servers.go           # 服务器列表命令
+│   ├── version.go           # 版本查询命令
+│   └── client.go            # 客户端创建
+├── devops/                  # DevOps API 客户端
+│   ├── devops.go            # 客户端核心
+│   ├── login.go             # 认证
+│   ├── deploy.go            # 部署 API
+│   ├── deploy_history.go    # 部署历史
+│   ├── program_alias.go     # 程序别名
+│   ├── server.go            # 服务器
+│   ├── version.go           # 版本
+│   └── wait.go              # 等待完成
+├── internal/                # 内部包
+│   ├── errors/              # 错误处理
+│   ├── logger/              # 日志管理
+│   └── version/             # 版本匹配
+├── main.go                  # 入口文件
+└── go.mod                   # Go 模块
+```
+
+### 依赖项
+
+| 包 | 版本 | 用途 |
+|---|------|------|
+| `github.com/urfave/cli/v2` | v2.27.7 | CLI 框架 |
+| `github.com/sirupsen/logrus` | v1.9.3 | 结构化日志 |
+| `github.com/joho/godotenv` | v1.5.1 | 环境变量加载 |
+| `golang.org/x/sync` | v0.10.0 | 并发控制 |
+| `github.com/gen2brain/beeep` | v0.11.2 | 桌面通知 |
+| `github.com/PuerkitoBio/goquery` | v1.11.0 | HTML 解析 |
+| `github.com/yassinebenaid/godump` | v0.11.1 | 调试输出 |
+
+### 构建命令
+
+```bash
+# 标准构建
+go build -o go-devops
+
+# 带版本信息构建
+go build -ldflags "-X main.Version=v1.0.0" -o go-devops
+
+# 跨平台构建
+GOOS=linux GOARCH=amd64 go build -o go-devops-linux
+GOOS=windows GOARCH=amd64 go build -o go-devops.exe
+GOOS=darwin GOARCH=amd64 go build -o go-devops-mac
+```
+
+### 运行测试
+
+```bash
+# 运行所有测试
+go test ./...
+
+# 运行测试并显示覆盖率
+go test -cover ./...
+
+# 运行特定包的测试
+go test ./cmd/...
+```
+
+---
+
+## 故障排查
+
+### 常见问题
+
+<details>
+<summary><b>1. 登录失败：认证错误</b></summary>
+
+**原因：** 用户名或密码错误
+
+**解决：**
+- 检查环境变量 `DEVOPS_USERNAME` 和 `DEVOPS_PASSWORD`
+- 确认账号在 DevOps 系统中存在且状态正常
+</details>
+
+<details>
+<summary><b>2. 部署失败：版本不存在</b></summary>
+
+**原因：** 指定的版本在目标环境中不存在
+
+**解决：**
+- 使用 `go-devops version -a <程序> -e <环境>` 查看可用版本
+- 检查程序类型（snapshots/releases）是否正确
+</details>
+
+<details>
+<summary><b>3. SSH 部署失败</b></summary>
+
+**原因：** 目标服务器 SSH 连接失败
+
+**解决：**
+- 工具会自动重试失败的服务器（最多 2 次）
+- 检查目标服务器的 SSH 服务状态
+- 确认网络连接正常
+</details>
+
+<details>
+<summary><b>4. 服务器未找到</b></summary>
+
+**原因：** 指定的服务器别名不存在
+
+**解决：**
+- 使用 `go-devops servers -a <程序> -e <环境>` 查看可用服务器
+- 确认服务器别名拼写正确
+</details>
+
+---
+
+## 最佳实践
+
+### 1. 使用环境变量管理配置
+
+创建 `.env` 文件管理常用配置，避免在命令行中暴露敏感信息：
+
+```bash
+# .env (不要提交到版本控制)
 DEVOPS_USERNAME=admin
 DEVOPS_PASSWORD=your_password
 ```
 
-### 2. Use --wait Flag for Critical Deployments
+### 2. 使用 --wait 参数
 
-When deploying critical services, use the `--wait` flag to ensure deployment completion:
-
-```bash
-./go-devops deploy -a critical-service -e prod -v 1.0.0 --wait
-```
-
-### 3. Leverage Fuzzy Version Matching
-
-Use simplified version numbers for deployment:
+部署关键服务时使用 `--wait` 参数确保部署完成：
 
 ```bash
-# Deploy the latest version of 4.32.x
-./go-devops deploy -a my-app -e dev2 -v 4.32 --wait
+go-devops deploy -a critical-service -e prod -v 1.0.0 --wait
 ```
 
-### 4. Enable Debug Mode for Troubleshooting
+### 3. 利用模糊版本匹配
 
-Enable `--debug` to view detailed logs when encountering issues:
+使用简化版本号进行部署：
 
 ```bash
-./go-devops deploy -a my-app -e dev2 -v 1.0.0 --wait --debug
+# 部署 4.32.x 的最新版本
+go-devops deploy -a my-app -e dev2 -v 4.32 --wait
 ```
 
-### 5. Use Notification Feature
+### 4. 启用调试模式排查问题
 
-Notify relevant personnel when deploying important updates:
+遇到问题时启用 `--debug` 查看详细日志：
 
 ```bash
-./go-devops deploy -a my-app -e prod -v 2.0.0 --notify devops,qa --wait
+go-devops deploy -a my-app -e dev2 -v 1.0.0 --wait --debug
 ```
 
-## Troubleshooting
+### 5. 使用通知功能
 
-### Common Issues
+部署重要更新时通知相关人员：
 
-**1. Login Failed: Authentication Error**
+```bash
+go-devops deploy -a my-app -e prod -v 2.0.0 --notify devops,qa --wait
+```
 
-- **Cause**: Incorrect username or password
-- **Solution**:
-  - Check `DEVOPS_USERNAME` and `DEVOPS_PASSWORD` environment variables
-  - Verify the account exists and is active in the DevOps system
+---
 
-**2. Deployment Failed: Version Not Found**
+## 许可证
 
-- **Cause**: The specified version does not exist in the target environment
-- **Solution**:
-  - Use `./go-devops version -a <program> -e <env>` to view available versions
-  - Check if the program type (snapshots/releases) is correct
+本项目采用 [MIT 许可证](LICENSE)。
 
-**3. SSH Deployment Failed**
+---
 
-- **Cause**: SSH connection to target server failed
-- **Solution**:
-  - The tool will automatically retry failed servers (up to 2 retries)
-  - Check the SSH service status on the target server
-  - Verify network connectivity
+## 贡献
 
-**4. Server Not Found**
+欢迎贡献代码！请随时提交 Pull Request。
 
-- **Cause**: The specified server alias does not exist
-- **Solution**:
-  - Use `./go-devops servers -a <program> -e <env>` to view available servers
-  - Verify the server alias spelling
+---
 
-## License
+## 联系方式
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+如有问题或建议，请提交 [Issue](https://github.com/your-username/go-devops/issues)。
 
-## Contributing
+---
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+<div align="center">
 
-## Contact
+**用爱构建 | Powered by Go**
 
-For issues or suggestions, please submit an [Issue](https://github.com/your-username/go-devops/issues).
+</div>
