@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"go-devops/devops"
 	"go-devops/internal/errors"
@@ -44,15 +45,10 @@ func programsAction(c *cli.Context) error {
 		return errors.NewValidationError("环境名称不能为空", nil)
 	}
 
-	// 创建 DevOps 客户端
-	client, err := createClient(cfg)
+	// 创建 DevOps 客户端并登录
+	client, err := createAndLoginClient(c.Context, cfg)
 	if err != nil {
-		return errors.NewAPIError("创建 DevOps 客户端失败", err)
-	}
-
-	// 登录
-	if err := client.Login(c.Context); err != nil {
-		return errors.NewLoginError("登录失败", err)
+		return err
 	}
 
 	// 查询程序列表
@@ -89,12 +85,10 @@ func printProgramsList(programs []string) {
 
 // printProgramsJSON 以 JSON 格式打印程序列表
 func printProgramsJSON(programs []string) {
-	fmt.Printf("[")
-	for i, p := range programs {
-		if i > 0 {
-			fmt.Printf(", ")
-		}
-		fmt.Printf(`"%s"`, p)
+	data, err := json.Marshal(programs)
+	if err != nil {
+		logger.Errorf("JSON 序列化失败: %v", err)
+		return
 	}
-	fmt.Printf("]\n")
+	fmt.Println(string(data))
 }

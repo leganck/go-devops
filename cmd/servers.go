@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"go-devops/devops"
 	"go-devops/internal/errors"
@@ -56,15 +57,10 @@ func serversAction(c *cli.Context) error {
 		return errors.NewValidationError("环境名称不能为空", nil)
 	}
 
-	// 创建 DevOps 客户端
-	client, err := createClient(cfg)
+	// 创建 DevOps 客户端并登录
+	client, err := createAndLoginClient(c.Context, cfg)
 	if err != nil {
-		return errors.NewAPIError("创建 DevOps 客户端失败", err)
-	}
-
-	// 登录
-	if err := client.Login(c.Context); err != nil {
-		return errors.NewLoginError("登录失败", err)
+		return err
 	}
 
 	// 查询服务器
@@ -119,21 +115,28 @@ func printServersTable(servers [][]devops.Server) {
 
 // printServersJSON 以 JSON 格式打印服务器列表
 func printServersJSON(servers [][]devops.Server) {
-	fmt.Printf("[")
-	firstGroup := true
-	for _, group := range servers {
-		if !firstGroup {
-			fmt.Printf(", ")
-		}
-		fmt.Printf("[")
-		for i, server := range group {
-			if i > 0 {
-				fmt.Printf(", ")
-			}
-			fmt.Printf(`{"alias":"%s","id":"%s"}`, server.ServerAlias, server.ServerID)
-		}
-		fmt.Printf("]")
-		firstGroup = false
+	// 创建简化的 JSON 输出结构
+	type serverOutput struct {
+		Alias string `json:"alias"`
+		ID    string `json:"id"`
 	}
-	fmt.Printf("]\n")
+
+	var result [][]serverOutput
+	for _, group := range servers {
+		var outputGroup []serverOutput
+		for _, server := range group {
+			outputGroup = append(outputGroup, serverOutput{
+				Alias: server.ServerAlias,
+				ID:    server.ServerID,
+			})
+		}
+		result = append(result, outputGroup)
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		logger.Errorf("JSON 序列化失败: %v", err)
+		return
+	}
+	fmt.Println(string(data))
 }

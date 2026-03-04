@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"go-devops/devops"
 	"go-devops/internal/errors"
@@ -51,7 +52,6 @@ func versionCommand() *cli.Command {
 
 // versionAction 执行版本查询操作
 func versionAction(c *cli.Context) error {
-	ctx := c.Context
 	cfg := getConfig(c)
 
 	// 验证必需参数
@@ -64,19 +64,14 @@ func versionAction(c *cli.Context) error {
 		return errors.NewValidationError("环境名称不能为空", nil)
 	}
 
-	// 创建 DevOps 客户端
-	client, err := createClient(cfg)
+	// 创建 DevOps 客户端并登录
+	client, err := createAndLoginClient(c.Context, cfg)
 	if err != nil {
-		return errors.NewAPIError("创建 DevOps 客户端失败", err)
-	}
-
-	// 登录
-	if err := client.Login(ctx); err != nil {
-		return errors.NewLoginError("登录失败", err)
+		return err
 	}
 
 	// 查询版本
-	versions, err := client.GetVersion(ctx, &devops.VersionRequest{
+	versions, err := client.GetVersion(c.Context, &devops.VersionRequest{
 		ProgramAliasName: programAlias,
 		ProgramType:      c.String("program-type"),
 		EnvName:          env,
@@ -116,13 +111,28 @@ func printVersionsTable(versions []devops.VersionItem) {
 
 // printVersionsJSON 以 JSON 格式打印版本列表
 func printVersionsJSON(versions []devops.VersionItem) {
-	fmt.Printf("[")
-	for i, v := range versions {
-		if i > 0 {
-			fmt.Printf(", ")
-		}
-		fmt.Printf(`{"version":"%s","size":"%s","modifyTime":"%s","path":"%s"}`,
-			v.Version, v.Size, v.ModifyTime, v.RelativePath)
+	// 创建简化的 JSON 输出结构
+	type versionOutput struct {
+		Version    string `json:"version"`
+		Size       string `json:"size"`
+		ModifyTime string `json:"modifyTime"`
+		Path       string `json:"path"`
 	}
-	fmt.Printf("]\n")
+
+	var result []versionOutput
+	for _, v := range versions {
+		result = append(result, versionOutput{
+			Version:    v.Version,
+			Size:       v.Size,
+			ModifyTime: v.ModifyTime,
+			Path:       v.RelativePath,
+		})
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		logger.Errorf("JSON 序列化失败: %v", err)
+		return
+	}
+	fmt.Println(string(data))
 }

@@ -93,10 +93,10 @@ func deployAction(c *cli.Context) error {
 		}
 	}
 
-	// 创建 DevOps 客户端
-	client, err := createClient(cfg)
+	// 创建 DevOps 客户端并登录
+	client, err := createAndLoginClient(ctx, cfg)
 	if err != nil {
-		return errors.NewAPIError("创建 DevOps 客户端失败", err)
+		return err
 	}
 
 	// 执行部署
@@ -124,30 +124,26 @@ type DeployOptions struct {
 
 // executeDeploy 执行部署流程
 func executeDeploy(ctx context.Context, client *devops.DevOps, opts *DeployOptions) error {
-	// 1. 登录
-	if err := client.Login(ctx); err != nil {
-		return errors.NewLoginError("登录失败", err)
-	}
 	logger.Infof("登录成功")
 
-	// 2. 检查程序是否存在
+	// 1. 检查程序是否存在
 	if err := checkProgramExists(ctx, client, opts.ProgramAlias, opts.Env); err != nil {
 		return err
 	}
 
-	// 3. 查询版本并获取路径
+	// 2. 查询版本并获取路径
 	versionPath, actualVersion, err := queryVersion(ctx, client, opts)
 	if err != nil {
 		return err
 	}
 
-	// 4. 获取服务器 ID
+	// 3. 获取服务器 ID
 	serverID, err := getServerID(ctx, client, opts.ProgramAlias, opts.Env, opts.Server)
 	if err != nil {
 		return err
 	}
 
-	// 5. 执行部署
+	// 4. 执行部署
 	if err := deployWithRetry(ctx, client, opts, versionPath, serverID, actualVersion); err != nil {
 		return err
 	}

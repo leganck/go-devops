@@ -32,15 +32,10 @@ func envsCommand() *cli.Command {
 func envsAction(c *cli.Context) error {
 	cfg := getConfig(c)
 
-	// 创建 DevOps 客户端
-	client, err := createClient(cfg)
+	// 创建 DevOps 客户端并登录
+	client, err := createAndLoginClient(c.Context, cfg)
 	if err != nil {
-		return errors.NewAPIError("创建 DevOps 客户端失败", err)
-	}
-
-	// 登录
-	if err := client.Login(c.Context); err != nil {
-		return errors.NewLoginError("登录失败", err)
+		return err
 	}
 
 	// 查询环境列表
