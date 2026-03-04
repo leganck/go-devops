@@ -6,6 +6,7 @@ toolchain go1.24.2
 
 require (
 	github.com/PuerkitoBio/goquery v1.11.0
+	github.com/gen2brain/beeep v0.11.2
 	github.com/joho/godotenv v1.5.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/urfave/cli/v2 v2.27.7
@@ -18,7 +19,6 @@ require (
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/esiqveland/notify v0.13.3 // indirect
-	github.com/gen2brain/beeep v0.11.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/jackmordaunt/icns/v3 v3.0.1 // indirect

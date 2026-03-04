@@ -25,20 +25,20 @@ func sendSuccessNotification(programAlias, actualVersion, env string, serverCoun
 }
 
 // sendRetryNotification 发送重试通知
-func sendRetryNotification(programAlias, actualVersion, serverID, env string, attempt int) {
+func sendRetryNotification(programAlias, actualVersion, serverName, env string, attempt int) {
 	sendNotification(
 		"重新部署开始",
 		fmt.Sprintf("开始重新部署程序 %s 版本 %s 到服务器 %s（环境 %s），第 %d 次重试...",
-			programAlias, actualVersion, serverID, env, attempt),
+			programAlias, actualVersion, serverName, env, attempt),
 	)
 }
 
 // sendSSHRetryNotification 发送 SSH 失败重试通知
-func sendSSHRetryNotification(programAlias, actualVersion, serverID, env string, attempt int) {
+func sendSSHRetryNotification(programAlias, actualVersion, serverName, env string, attempt int) {
 	sendNotification(
 		"部署重试",
 		fmt.Sprintf("程序 %s 版本 %s 部署到服务器 %s（环境 %s）SSH失败，正在进行第 %d 次重试...",
-			programAlias, actualVersion, serverID, env, attempt),
+			programAlias, actualVersion, serverName, env, attempt),
 	)
 }
 

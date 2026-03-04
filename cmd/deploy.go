@@ -127,14 +127,14 @@ func executeDeploy(ctx context.Context, client *devops.DevOps, opts *DeployOptio
 		return err
 	}
 
-	// 3. 获取服务器 ID 列表
-	serverIDs, err := getServerIDs(ctx, client, opts.ProgramAlias, opts.Env, opts.Server)
+	// 3. 获取服务器信息（包含 ID 和名称映射）
+	serverInfo, err := getServerInfo(ctx, client, opts.ProgramAlias, opts.Env, opts.Server)
 	if err != nil {
 		return err
 	}
 
 	// 4. 执行部署到所有服务器
-	if err := deployToServers(ctx, client, opts, versionPath, serverIDs, actualVersion); err != nil {
+	if err := deployToServers(ctx, client, opts, versionPath, serverInfo, actualVersion); err != nil {
 		return err
 	}
 
@@ -142,10 +142,10 @@ func executeDeploy(ctx context.Context, client *devops.DevOps, opts *DeployOptio
 }
 
 // deployToServers 部署到多个服务器（支持重试）
-func deployToServers(ctx context.Context, client *devops.DevOps, opts *DeployOptions, versionPath string, serverIDs []string, actualVersion string) error {
-	if len(serverIDs) == 0 {
+func deployToServers(ctx context.Context, client *devops.DevOps, opts *DeployOptions, versionPath string, serverInfo *ServerInfo, actualVersion string) error {
+	if len(serverInfo.IDs) == 0 {
 		return errors.NewValidationError("没有可部署的服务器", nil)
 	}
 
-	return deployWithRetry(ctx, client, opts, versionPath, serverIDs, actualVersion)
+	return deployWithRetry(ctx, client, opts, versionPath, serverInfo, actualVersion)
 }

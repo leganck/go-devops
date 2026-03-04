@@ -97,7 +97,8 @@ func getServerIDs(ctx context.Context, client *devops.DevOps, programAlias, env,
 
 	// 如果 serverAlias 为空，返回所有服务器 ID
 	if serverAlias == "" {
-		var serverIDs []string
+		// 预分配切片容量以避免多次扩容
+		serverIDs := make([]string, 0, len(allServers))
 		for _, server := range allServers {
 			serverIDs = append(serverIDs, server.ServerID)
 		}
@@ -121,4 +122,70 @@ func getServerIDs(ctx context.Context, client *devops.DevOps, programAlias, env,
 	}
 
 	return nil, errors.NewServerError(fmt.Sprintf("未找到服务器 %s 的 ID", serverAlias), nil)
+}
+
+// ServerInfo 包含服务器的 ID 和名称映射信息
+type ServerInfo struct {
+	IDs   []string            // 服务器 ID 列表
+	Names map[string]string   // 服务器 ID 到名称的映射
+}
+
+// getServerInfo 获取服务器信息（一次 API 调用获取 ID 和名称映射）
+//
+// 返回所有服务器的 ID 列表和 ID 到 ServerAlias 的映射
+func getServerInfo(ctx context.Context, client *devops.DevOps, programAlias, env, serverAlias string) (*ServerInfo, error) {
+	logger.Infof("获取程序 %s 在环境 %s 中的服务器...", programAlias, env)
+
+	servers, err := client.GetServers(ctx, &devops.ServerRequest{
+		EnvName:          env,
+		ProgramAliasName: programAlias,
+	})
+	if err != nil {
+		return nil, errors.NewAPIError("获取服务器失败", err)
+	}
+
+	// 展平所有服务器
+	var allServers []devops.Server
+	for _, group := range servers {
+		allServers = append(allServers, group...)
+	}
+
+	logger.Infof("找到 %d 个服务器", len(allServers))
+
+	// 预分配切片容量
+	info := &ServerInfo{
+		IDs:   make([]string, 0, len(allServers)),
+		Names: make(map[string]string, len(allServers)),
+	}
+
+	// 如果 serverAlias 为空，返回所有服务器
+	if serverAlias == "" {
+		for _, server := range allServers {
+			info.IDs = append(info.IDs, server.ServerID)
+			info.Names[server.ServerID] = server.ServerAlias
+		}
+		logger.Infof("返回所有服务器信息 (共 %d 个服务器)", len(info.IDs))
+		return info, nil
+	}
+
+	// 如果只有一个服务器，使用它
+	if len(allServers) == 1 {
+		serverID := allServers[0].ServerID
+		logger.Infof("注意: 只有一个服务器，使用服务器 %s (ID: %s)", allServers[0].ServerAlias, serverID)
+		info.IDs = append(info.IDs, serverID)
+		info.Names[serverID] = allServers[0].ServerAlias
+		return info, nil
+	}
+
+	// 查找指定的服务器
+	for _, server := range allServers {
+		if server.ServerAlias == serverAlias {
+			logger.Infof("找到服务器 ID: %s，服务器别名: %s", server.ServerID, server.ServerAlias)
+			info.IDs = append(info.IDs, server.ServerID)
+			info.Names[server.ServerID] = server.ServerAlias
+			return info, nil
+		}
+	}
+
+	return nil, errors.NewServerError(fmt.Sprintf("未找到服务器 %s", serverAlias), nil)
 }
