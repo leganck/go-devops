@@ -82,8 +82,9 @@ func redeploySingleServer(ctx context.Context, client *devops.DevOps, opts *Depl
 	// 查找该服务器的最新任务
 	for _, item := range historyResult.Data {
 		if item.ServerId == serverID && item.DeployStatus != devops.DeployStatusSuccess {
-			logger.Infof("服务器 %s: 找到重试任务 %s (状态: %d)", serverID, item.TaskUuid, item.DeployStatus)
-			return item.TaskUuid, nil
+			logger.Infof("服务器 %s: 找到重试任务 history.id=%s, taskUuid=%s (状态: %d)", serverID, item.ID, item.TaskUuid, item.DeployStatus)
+			// 监听重试任务时改为使用 history.ID 作为任务标识
+			return item.ID, nil
 		}
 	}
 

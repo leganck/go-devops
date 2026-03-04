@@ -27,59 +27,59 @@ var (
 // checkDeployStatus 检查部署任务的当前状态
 // 如果任务成功完成返回 nil，如果仍在运行返回 ErrTaskInProgress，
 // 如果是 SSH 相关失败返回 ErrSSHDeploymentFailed，或其他错误返回相应的错误。
-func (d *DevOps) checkDeployStatus(ctx context.Context, taskUUID string) error {
+func (d *DevOps) checkDeployStatus(ctx context.Context, taskID string) error {
 	historyReq := &DeployHistoryRequest{
 		Page:  1,
 		Limit: 10,
 	}
-
 	historyResult, err := d.GetDeployHistory(ctx, historyReq)
 	if err != nil {
 		return fmt.Errorf("failed to get deploy history: %w", err)
 	}
 
-	// 在结果中查找 UUID 匹配的任务
+	// 在结果中查找 ID 匹配的任务
 	var targetTask *DeployHistoryItem
 	for i := range historyResult.Data {
-		if historyResult.Data[i].TaskUuid == taskUUID {
+		// 这里使用 history.ID 作为任务唯一标识
+		if historyResult.Data[i].ID == taskID {
 			targetTask = &historyResult.Data[i]
 			break
 		}
 	}
 
 	if targetTask == nil {
-		return fmt.Errorf("task %s not found in deploy history", taskUUID)
+		return fmt.Errorf("task %s not found in deploy history", taskID)
 	}
 
-	return d.evaluateDeployStatus(targetTask, taskUUID)
+	return d.evaluateDeployStatus(targetTask, taskID)
 }
 
 // evaluateDeployStatus 评估部署状态并返回相应的错误或 nil
-func (d *DevOps) evaluateDeployStatus(task *DeployHistoryItem, taskUUID string) error {
+func (d *DevOps) evaluateDeployStatus(task *DeployHistoryItem, taskID string) error {
 	switch task.DeployStatus {
 	case DeployStatusSuccess:
 		logger.Infof("task %s completed successfully (status: %d, description: %s)",
-			taskUUID, task.DeployStatus, task.DeployDesc)
+			taskID, task.DeployStatus, task.DeployDesc)
 		return nil
 
 	case DeployStatusFailed:
 		logger.Errorf("task %s failed with status: %d, description: %s",
-			taskUUID, task.DeployStatus, task.DeployDesc)
+			taskID, task.DeployStatus, task.DeployDesc)
 		// 检查是否为 SSH 错误以便重试
 		if d.isSSHError(task.DeployDesc) {
-			logger.Errorf("task %s failed with SSH error, will return SSH-specific error for potential retry", taskUUID)
+			logger.Errorf("task %s failed with SSH error, will return SSH-specific error for potential retry", taskID)
 			return ErrSSHDeploymentFailed
 		}
-		return fmt.Errorf("deployment task %s failed: %s", taskUUID, task.DeployDesc)
+		return fmt.Errorf("deployment task %s failed: %s", taskID, task.DeployDesc)
 
 	case DeployStatusCancelled:
 		logger.Errorf("task %s was cancelled (status: %d, description: %s)",
-			taskUUID, task.DeployStatus, task.DeployDesc)
-		return fmt.Errorf("deployment task %s was cancelled: %s", taskUUID, task.DeployDesc)
+			taskID, task.DeployStatus, task.DeployDesc)
+		return fmt.Errorf("deployment task %s was cancelled: %s", taskID, task.DeployDesc)
 
 	default:
 		logger.Infof("task %s is still in progress (status: %d, description: %s), waiting...",
-			taskUUID, task.DeployStatus, task.DeployDesc)
+			taskID, task.DeployStatus, task.DeployDesc)
 		return ErrTaskInProgress
 	}
 }
@@ -95,8 +95,8 @@ func (d *DevOps) isSSHError(description string) bool {
 // 如果部署成功完成返回 nil。
 // 如果由于 SSH 问题导致部署失败返回 ErrSSHDeploymentFailed（用于重试逻辑）。
 // 其他失败或超时返回错误。
-func (d *DevOps) WaitForDeployCompletion(ctx context.Context, taskUUID string, pollInterval, timeout time.Duration) error {
-	logger.Infof("waiting for deployment task %s to complete (poll interval: %v, timeout: %v)...", taskUUID, pollInterval, timeout)
+func (d *DevOps) WaitForDeployCompletion(ctx context.Context, taskID string, serverName string, pollInterval, timeout time.Duration) error {
+	logger.Infof("服务器 %s: 开始等待部署任务 %s 完成（轮询间隔: %v, 超时时间: %v）...", serverName, taskID, pollInterval, timeout)
 
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -107,9 +107,9 @@ func (d *DevOps) WaitForDeployCompletion(ctx context.Context, taskUUID string, p
 	for {
 		select {
 		case <-ticker.C:
-			err := d.checkDeployStatus(waitCtx, taskUUID)
+			err := d.checkDeployStatus(waitCtx, taskID)
 			if err == nil {
-				logger.Infof("task %s completed successfully", taskUUID)
+				logger.Infof("服务器 %s: 部署任务 %s 已成功完成", serverName, taskID)
 				return nil
 			}
 			if errors.Is(err, ErrTaskInProgress) {
@@ -118,11 +118,11 @@ func (d *DevOps) WaitForDeployCompletion(ctx context.Context, taskUUID string, p
 			if errors.Is(err, ErrSSHDeploymentFailed) {
 				return ErrSSHDeploymentFailed
 			}
-			return fmt.Errorf("task %s: unexpected error: %w", taskUUID, err)
+			return fmt.Errorf("服务器 %s 的任务 %s: 等待过程中出现异常: %w", serverName, taskID, err)
 
 		case <-waitCtx.Done():
-			logger.Errorf("task %s: wait aborted due to timeout or context cancellation", taskUUID)
-			return fmt.Errorf("wait for task %s aborted: %w", taskUUID, waitCtx.Err())
+			logger.Errorf("服务器 %s 的任务 %s: 等待因超时或上下文取消而终止", serverName, taskID)
+			return fmt.Errorf("服务器 %s 的任务 %s: 等待被中止: %w", serverName, taskID, waitCtx.Err())
 		}
 	}
 }

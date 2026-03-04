@@ -44,9 +44,10 @@ func findTaskUUIDs(ctx context.Context, client *devops.DevOps, env, programAlias
 	taskMap := make(map[string]string, len(serverIDs))
 	for _, serverID := range serverIDs {
 		if item, found := pendingTasks[serverID]; found {
-			logger.Infof("找到未完成任务: ServerID=%s, TaskUUID=%s, Status=%d",
-				item.ServerId, item.TaskUuid, item.DeployStatus)
-			taskMap[serverID] = item.TaskUuid
+			logger.Infof("找到未完成任务: ServerID=%s, ID=%s, TaskUUID=%s, Status=%d",
+				item.ServerId, item.ID, item.TaskUuid, item.DeployStatus)
+			// 监听任务时改为使用 history.ID 作为标识
+			taskMap[serverID] = item.ID
 		} else {
 			logger.Infof("服务器 %s 没有未完成的任务", serverID)
 		}

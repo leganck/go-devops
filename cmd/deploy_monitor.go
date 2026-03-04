@@ -29,7 +29,7 @@ type RetryConfig struct {
 	VersionPath   string
 	ServerID      string
 	ActualVersion string
-	TaskUUID      string
+	TaskID        string
 	ServerName    string
 }
 
@@ -86,8 +86,8 @@ func watchAndRetryTasks(ctx context.Context, client *devops.DevOps, opts *Deploy
 			sem <- struct{}{}        // 获取信号量
 			defer func() { <-sem }() // 释放信号量
 
-			// 获取初始任务 UUID
-			taskUUID, exists := initialTaskMap[serverID]
+			// 获取初始任务 ID
+			taskID, exists := initialTaskMap[serverID]
 			if !exists {
 				logger.Warningf("服务器 %s 没有初始任务，跳过", serverID)
 				return nil
@@ -107,7 +107,7 @@ func watchAndRetryTasks(ctx context.Context, client *devops.DevOps, opts *Deploy
 				VersionPath:   versionPath,
 				ServerID:      serverID,
 				ActualVersion: actualVersion,
-				TaskUUID:      taskUUID,
+				TaskID:        taskID,
 				ServerName:    serverName,
 			}
 			if err := deploySingleServerWithRetry(retryCfg); err != nil {
@@ -151,8 +151,8 @@ func deploySingleServerWithRetry(cfg RetryConfig) error {
 		}
 
 		// 等待当前任务完成
-		logger.Infof("服务器 %s: 等待任务 %s 完成 (尝试 %d/%d)...", cfg.ServerName, cfg.TaskUUID, attempt+1, maxSSHRetry+1)
-		waitErr := cfg.Client.WaitForDeployCompletion(cfg.Ctx, cfg.TaskUUID, 10*time.Second, 10*time.Minute)
+		logger.Infof("服务器 %s: 等待任务 %s 完成 (尝试 %d/%d)...", cfg.ServerName, cfg.TaskID, attempt+1, maxSSHRetry+1)
+		waitErr := cfg.Client.WaitForDeployCompletion(cfg.Ctx, cfg.TaskID, cfg.ServerName, 10*time.Second, 10*time.Minute)
 
 		if waitErr == nil {
 			logger.Infof("服务器 %s: 部署成功完成", cfg.ServerName)
@@ -174,11 +174,11 @@ func deploySingleServerWithRetry(cfg RetryConfig) error {
 
 			// 重新部署该服务器
 			logger.Infof("服务器 %s: 重新部署...", cfg.ServerName)
-			newTaskUUID, deployErr := redeploySingleServer(cfg.Ctx, cfg.Client, cfg.Opts, cfg.VersionPath, cfg.ServerID, cfg.ActualVersion)
+			newTaskID, deployErr := redeploySingleServer(cfg.Ctx, cfg.Client, cfg.Opts, cfg.VersionPath, cfg.ServerID, cfg.ActualVersion)
 			if deployErr != nil {
 				return fmt.Errorf("服务器 %s 重新部署失败: %w", cfg.ServerName, deployErr)
 			}
-			cfg.TaskUUID = newTaskUUID
+			cfg.TaskID = newTaskID
 			continue
 		}
 
