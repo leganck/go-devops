@@ -5,7 +5,6 @@ import (
 	"go-devops/devops"
 	"go-devops/internal/errors"
 	"go-devops/internal/logger"
-	"strings"
 
 	"github.com/urfave/cli/v2"
 )
@@ -25,11 +24,6 @@ func programsCommand() *cli.Command {
 				Aliases: []string{"e"},
 				Usage:   "环境名称 (例如: dev2, test)",
 				EnvVars: []string{"DEVOPS_ENV", "ENV"},
-			},
-			&cli.StringFlag{
-				Name:    "filter",
-				Aliases: []string{"f"},
-				Usage:   "过滤程序名称 (支持部分匹配)",
 			},
 			&cli.BoolFlag{
 				Name:    "json",
@@ -69,12 +63,6 @@ func programsAction(c *cli.Context) error {
 		return errors.NewAPIError("获取程序列表失败", err)
 	}
 
-	// 应用过滤过滤
-	filter := c.String("filter")
-	if filter != "" {
-		programs = filterPrograms(programs, filter)
-	}
-
 	// 输出结果
 	if c.Bool("json") {
 		printProgramsJSON(programs)
@@ -83,18 +71,6 @@ func programsAction(c *cli.Context) error {
 	}
 
 	return nil
-}
-
-// filterPrograms 过滤程序列表
-func filterPrograms(programs []string, filter string) []string {
-	var result []string
-	lowerFilter := strings.ToLower(filter)
-	for _, p := range programs {
-		if strings.Contains(strings.ToLower(p), lowerFilter) {
-			result = append(result, p)
-		}
-	}
-	return result
 }
 
 // printProgramsList 打印程序列表

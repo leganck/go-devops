@@ -81,6 +81,19 @@ type DevOps struct {
 
 // NewDevOps 使用给定的凭据和配置创建新的 DevOps 客户端
 func NewDevOps(auth *Auth, baseURL string, debug bool) (*DevOps, error) {
+	if auth == nil {
+		return nil, fmt.Errorf("auth cannot be nil")
+	}
+	if auth.Username == "" {
+		return nil, fmt.Errorf("username is required")
+	}
+	if auth.Password == "" {
+		return nil, fmt.Errorf("password is required")
+	}
+	if baseURL == "" {
+		return nil, fmt.Errorf("baseURL is required")
+	}
+
 	baseURL = strings.TrimRight(baseURL, "/")
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -264,4 +277,35 @@ func (d *DevOps) hasPermission(permission, env string) bool {
 	}
 
 	return false
+}
+
+// GetEnvs 获取具有 deployProgram:page 权限的所有环境列表
+func (d *DevOps) GetEnvs() []string {
+	if d.Authorities == nil {
+		return []string{}
+	}
+
+	var envs []string
+	seen := make(map[string]bool)
+
+	for _, auth := range *d.Authorities {
+		if auth.Permission != "deployProgram:page" {
+			continue
+		}
+
+		// 如果 Envs 为空，没有特定环境限制，跳过
+		if len(auth.Envs) == 0 {
+			continue
+		}
+
+		// 添加所有环境，去重
+		for _, env := range auth.Envs {
+			if !seen[env] {
+				seen[env] = true
+				envs = append(envs, env)
+			}
+		}
+	}
+
+	return envs
 }

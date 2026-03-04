@@ -41,6 +41,16 @@ type LoginData struct {
 // Login 使用 RSA 加密与 DevOps API 进行身份验证
 // 它从登录页面获取 RSA 公钥，加密密码，并发送登录请求。权限被缓存用于权限检查。
 func (d *DevOps) Login(ctx context.Context) error {
+	if d.Auth == nil {
+		return fmt.Errorf("auth not configured")
+	}
+	if d.Auth.Username == "" {
+		return fmt.Errorf("username is required")
+	}
+	if d.Auth.Password == "" {
+		return fmt.Errorf("password is required")
+	}
+
 	pubKeyStr, err := d.fetchLoginPage(ctx)
 	if err != nil {
 		return fmt.Errorf("fetch login page: %w", err)

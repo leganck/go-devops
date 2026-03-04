@@ -35,6 +35,7 @@ func NewApp() *cli.App {
 			versionCommand(),
 			serversCommand(),
 			programsCommand(),
+			envsCommand(),
 		},
 	}
 }
