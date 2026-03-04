@@ -20,49 +20,26 @@ import (
 	"github.com/yassinebenaid/godump"
 )
 
-// StringOrNumber unmarshals both JSON string and number into Go string
-type StringOrNumber string
+const (
+	// rsaPublicKeyPattern 是从 HTML 中提取 RSA 公钥的正则表达式模式
+	rsaPublicKeyPattern = `let rsaPlublic="([\s\S]*?)\n?"`
+)
 
-func (s *StringOrNumber) UnmarshalJSON(data []byte) error {
-	var str string
-	if err := json.Unmarshal(data, &str); err == nil {
-		*s = StringOrNumber(str)
-		return nil
-	}
-	var num json.Number
-	if err := json.Unmarshal(data, &num); err != nil {
-		return fmt.Errorf("cannot unmarshal %q as string or number", data)
-	}
-	*s = StringOrNumber(num.String())
-	return nil
-}
-
-// LoginData is the "data" field of login response
-type LoginData struct {
-	UserMenu    map[StringOrNumber]UserMenu `json:"usermenu"`
-	RedirectURL string                      `json:"redirctUrl"` // API typo preserved
-	Authorities map[string]Authority        `json:"authorities"`
-}
-
-// UserMenu represents menu item in login response
+// UserMenu 表示登录响应中的菜单项
 type UserMenu struct {
 	MenuID   StringOrNumber `json:"menuId"`
 	MenuSort interface{}    `json:"menuSort"`
 }
 
-// Authority represents a permission item
-type Authority struct {
-	ID         StringOrNumber `json:"id"`
-	ParentID   StringOrNumber `json:"parentId"`
-	MenuName   string         `json:"menuName"`
-	Permission string         `json:"permission"`
-	MultiEnv   int            `json:"multiEnv"`
-	PageHref   string         `json:"pageHref"`
-	Envs       []string       `json:"envs"`
-	Child      interface{}    `json:"child"`
+// LoginData 包含成功登录后返回的数据
+type LoginData struct {
+	UserMenu    map[StringOrNumber]UserMenu `json:"usermenu"`
+	RedirectURL string                      `json:"redirctUrl"` // 保留 API 拼写错误
+	Authorities map[string]Authority        `json:"authorities"`
 }
 
-// Login performs RSA-encrypted login and caches LoginData
+// Login 使用 RSA 加密与 DevOps API 进行身份验证
+// 它从登录页面获取 RSA 公钥，加密密码，并发送登录请求。权限被缓存用于权限检查。
 func (d *DevOps) Login(ctx context.Context) error {
 	pubKeyStr, err := d.fetchLoginPage(ctx)
 	if err != nil {
@@ -77,7 +54,7 @@ func (d *DevOps) Login(ctx context.Context) error {
 		d.pubKey = pubKey
 	}
 
-	encPass, err := rsaEncrypt(d.Auth.Password, d.pubKey)
+	encPass, err := rsaEncrypt(d.Auth.Password, d.pubKey.(*rsa.PublicKey))
 	if err != nil {
 		return fmt.Errorf("encrypt password: %w", err)
 	}
@@ -109,28 +86,35 @@ func (d *DevOps) Login(ctx context.Context) error {
 
 	var loginData LoginData
 	if err := apiResp.WithData(&loginData); err != nil {
-		return fmt.Errorf("parse login  %w", err)
+		return fmt.Errorf("parse login data: %w", err)
 	}
 
 	d.Authorities = &loginData.Authorities
 
-	if d.Debug {
-		logger.Debugf("[DEBUG] Login success: redirect=%q, menus=%d, authorities=%d",
-			loginData.RedirectURL,
-			len(loginData.UserMenu),
-			len(loginData.Authorities))
-		// Optional: Debug dump full response
-		logger.Debug("=== Debug Mode: Login Data ===")
-		if err := godump.Dump(loginData); err != nil {
-			logger.Warningf("failed to dump login data: %v", err)
-		}
-		logger.Debug("==============================")
-	}
+	d.logLoginSuccess(&loginData)
 
 	return nil
 }
 
-// fetchLoginPage extracts RSA public key from /public/login
+// logLoginSuccess 记录成功登录的调试信息
+func (d *DevOps) logLoginSuccess(data *LoginData) {
+	if !d.Debug {
+		return
+	}
+
+	logger.Debugf("[DEBUG] Login success: redirect=%q, menus=%d, authorities=%d",
+		data.RedirectURL,
+		len(data.UserMenu),
+		len(data.Authorities))
+
+	logger.Debug("=== Debug Mode: Login Data ===")
+	if err := godump.Dump(data); err != nil {
+		logger.Warningf("failed to dump login data: %v", err)
+	}
+	logger.Debug("==============================")
+}
+
+// fetchLoginPage 获取登录页面 HTML 并提取 RSA 公钥
 func (d *DevOps) fetchLoginPage(ctx context.Context) (string, error) {
 	resp, err := d.get(ctx, "/public/login")
 	if err != nil {
@@ -139,7 +123,7 @@ func (d *DevOps) fetchLoginPage(ctx context.Context) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GET /public/login: %d", resp.StatusCode)
+		return "", fmt.Errorf("GET /public/login: unexpected status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -155,10 +139,11 @@ func (d *DevOps) fetchLoginPage(ctx context.Context) (string, error) {
 	return pubKeyStr, nil
 }
 
+// extractRSAPublicKey 从 HTML 登录页面提取 RSA 公钥
 func extractRSAPublicKey(html string) (string, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parse HTML: %w", err)
 	}
 
 	var script string
@@ -168,58 +153,53 @@ func extractRSAPublicKey(html string) (string, error) {
 			script = t
 		}
 	})
+
 	if script == "" {
-		return "", fmt.Errorf("rsaPlublic script not found")
+		return "", fmt.Errorf("rsaPlublic script not found in login page")
 	}
 
-	re := regexp.MustCompile(`let rsaPlublic="([\s\S]*?)\n?"`)
-	m := re.FindStringSubmatch(script)
-	if len(m) < 2 {
-		return "", fmt.Errorf("rsaPlublic value not matched")
+	re := regexp.MustCompile(rsaPublicKeyPattern)
+	matches := re.FindStringSubmatch(script)
+	if len(matches) < 2 {
+		return "", fmt.Errorf("rsaPlublic value not matched by regex")
 	}
-	return processEscapedPublicKey(m[1]), nil
+
+	return processEscapedPublicKey(matches[1]), nil
 }
 
-func parseRSAPublicKey(s string) (*rsa.PublicKey, error) {
-	pemBlock := fmt.Sprintf("-----BEGIN PUBLIC KEY-----\n%s\n-----END PUBLIC KEY-----", s)
-	block, _ := pem.Decode([]byte(pemBlock))
-	if block == nil || block.Type != "PUBLIC KEY" {
-		return nil, fmt.Errorf("invalid PEM")
-	}
-	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		return nil, err
-	}
-	pk, ok := pub.(*rsa.PublicKey)
-	if !ok {
-		return nil, fmt.Errorf("not RSA key")
-	}
-	return pk, nil
-}
-
+// processEscapedPublicKey 处理转义的公钥字符串
 func processEscapedPublicKey(s string) string {
 	s = strings.ReplaceAll(s, "\\/", "/")
 	s = strings.ReplaceAll(s, "\\n", "\n")
 	return strings.TrimSuffix(s, "\n")
 }
 
-func rsaEncrypt(plain string, pub *rsa.PublicKey) (string, error) {
-	ct, err := rsa.EncryptPKCS1v15(rand.Reader, pub, []byte(plain))
+// parseRSAPublicKey 解析 PEM 编码的 RSA 公钥
+func parseRSAPublicKey(s string) (*rsa.PublicKey, error) {
+	pemBlock := fmt.Sprintf("-----BEGIN PUBLIC KEY-----\n%s\n-----END PUBLIC KEY-----", s)
+	block, _ := pem.Decode([]byte(pemBlock))
+	if block == nil || block.Type != "PUBLIC KEY" {
+		return nil, fmt.Errorf("invalid PEM block: expected PUBLIC KEY")
+	}
+
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("parse PKIX public key: %w", err)
 	}
-	return base64.StdEncoding.EncodeToString(ct), nil
+
+	pk, ok := pub.(*rsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("public key is not RSA")
+	}
+
+	return pk, nil
 }
 
-// IsSuccess checks if code == 0
-func (r *APIResponse) IsSuccess() bool {
-	return r.Code == 0
-}
-
-// WithData unmarshals Data field into given pointer
-func (r *APIResponse) WithData(v interface{}) error {
-	if len(r.Data) == 0 || string(r.Data) == "null" {
-		return nil
+// rsaEncrypt 使用 RSA PKCS#1 v1.5 加密明文
+func rsaEncrypt(plain string, pub *rsa.PublicKey) (string, error) {
+	ciphertext, err := rsa.EncryptPKCS1v15(rand.Reader, pub, []byte(plain))
+	if err != nil {
+		return "", fmt.Errorf("RSA encrypt: %w", err)
 	}
-	return json.Unmarshal(r.Data, v)
+	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }

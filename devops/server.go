@@ -6,21 +6,22 @@ import (
 	"net/url"
 )
 
-// ServerRequest for server list query
+// ServerRequest 包含查询可用服务器的参数
 type ServerRequest struct {
-	EnvName          string `json:"envName"`
-	ProgramAliasName string `json:"programAliasName"`
+	EnvName          string `json:"envName"`          // 环境名称（例如 "dev2"、"test"）
+	ProgramAliasName string `json:"programAliasName"` // 程序别名标识符
 }
 
-// Server represents a server item
+// Server 表示来自 API 的部署服务器
 type Server struct {
-	ServerAlias string `json:"serverAlias"`
-	ServerID    string `json:"serverId"`
+	ServerAlias string `json:"serverAlias"` // 人类可读的服务器别名
+	ServerID    string `json:"serverId"`    // 唯一的服务器标识符
 }
 
-// GetServers queries server list for a program
+// GetServers 查询可用于部署程序的服务器列表
+// 服务器以组的形式返回，每组表示一个逻辑分组。
+// 需要对指定环境具有 "deployProgram:page" 权限。
 func (d *DevOps) GetServers(ctx context.Context, req *ServerRequest) ([][]Server, error) {
-	// Check permission
 	if !d.hasPermission("deployProgram:page", req.EnvName) {
 		return nil, fmt.Errorf("permission denied: missing deployProgram:page permission for environment %s", req.EnvName)
 	}
@@ -31,8 +32,7 @@ func (d *DevOps) GetServers(ctx context.Context, req *ServerRequest) ([][]Server
 	}
 
 	var servers [][]Server
-	err := d.PostRequest(ctx, "/deployProgram/server", params, &servers)
-	if err != nil {
+	if err := d.PostRequest(ctx, "/deployProgram/server", params, &servers); err != nil {
 		return nil, err
 	}
 

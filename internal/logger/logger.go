@@ -1,81 +1,117 @@
 package logger
 
 import (
+	"io"
 	"os"
 
 	"github.com/sirupsen/logrus"
 )
 
-// Logger is the global logger instance
-var Logger *logrus.Logger
+// Logger 定义日志接口
+type Logger interface {
+	Debug(args ...interface{})
+	Debugf(format string, args ...interface{})
+	Info(args ...interface{})
+	Infof(format string, args ...interface{})
+	Warning(args ...interface{})
+	Warningf(format string, args ...interface{})
+	Error(args ...interface{})
+	Errorf(format string, args ...interface{})
+	Fatal(args ...interface{})
+	Fatalf(format string, args ...interface{})
+}
 
-// InitLogger initializes the logger with proper configuration
+// logrusLogger 封装 logrus.Logger 以实现 Logger 接口
+type logrusLogger struct {
+	*logrus.Logger
+}
+
+// 全局日志实例
+var global Logger = &logrusLogger{Logger: logrus.New()}
+
+// InitLogger 使用适当的配置初始化全局日志记录器
 func InitLogger(debug bool) {
-	Logger = logrus.New()
+	logger := logrus.New()
 
-	// Set log format
-	Logger.SetFormatter(&logrus.TextFormatter{
+	// 设置日志格式
+	logger.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: "2006/01/02 15:04:05",
 	})
 
-	// Set output
-	Logger.SetOutput(os.Stdout)
+	// 设置输出
+	logger.SetOutput(os.Stdout)
 
-	// Set log level
+	// 设置日志级别
 	if debug {
-		Logger.SetLevel(logrus.DebugLevel)
+		logger.SetLevel(logrus.DebugLevel)
 	} else {
-		Logger.SetLevel(logrus.InfoLevel)
+		logger.SetLevel(logrus.InfoLevel)
+	}
+
+	global = &logrusLogger{Logger: logger}
+}
+
+// SetOutput 设置日志记录器的输出目标
+func SetOutput(w io.Writer) {
+	if l, ok := global.(*logrusLogger); ok {
+		l.Logger.SetOutput(w)
 	}
 }
 
-// Debug logs a debug message
+// SetLevel 设置日志级别
+func SetLevel(level logrus.Level) {
+	if l, ok := global.(*logrusLogger); ok {
+		l.Logger.SetLevel(level)
+	}
+}
+
+// Debug 记录调试信息
 func Debug(args ...interface{}) {
-	Logger.Debug(args...)
+	global.Debug(args...)
 }
 
-// Debugf logs a formatted debug message
+// Debugf 记录格式化的调试信息
 func Debugf(format string, args ...interface{}) {
-	Logger.Debugf(format, args...)
+	global.Debugf(format, args...)
 }
 
-// Info logs an info message
+// Info 记录普通信息
 func Info(args ...interface{}) {
-	Logger.Info(args...)
+	global.Info(args...)
 }
 
-// Infof logs a formatted info message
+// Infof 记录格式化的普通信息
 func Infof(format string, args ...interface{}) {
-	Logger.Infof(format, args...)
+	global.Infof(format, args...)
 }
 
-// Warning logs a warning message
+// Warning 记录警告信息
 func Warning(args ...interface{}) {
-	Logger.Warning(args...)
+	global.Warning(args...)
 }
 
-// Warningf logs a formatted warning message
+// Warningf 记录格式化的警告信息
 func Warningf(format string, args ...interface{}) {
-	Logger.Warningf(format, args...)
+	global.Warningf(format, args...)
 }
 
-// Error logs an error message
+// Error 记录错误信息
 func Error(args ...interface{}) {
-	Logger.Error(args...)
+	global.Error(args...)
 }
 
-// Errorf logs a formatted error message
+// Errorf 记录格式化的错误信息
 func Errorf(format string, args ...interface{}) {
-	Logger.Errorf(format, args...)
+	global.Errorf(format, args...)
 }
 
-// Fatal logs a fatal message and exits
+// Fatal 记录致命错误信息并退出程序
 func Fatal(args ...interface{}) {
-	Logger.Fatal(args...)
+	global.Fatal(args...)
 }
 
-// Fatalf logs a formatted fatal message and exits
+// Fatalf 记录格式化的致命错误信息并退出程序
 func Fatalf(format string, args ...interface{}) {
-	Logger.Fatalf(format, args...)
+	global.Fatalf(format, args...)
 }

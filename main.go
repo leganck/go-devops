@@ -8,37 +8,62 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-// Version set at compile-time (e.g., go build -ldflags "-X main.Version=v1.2.3")
+// Version 在编译时使用 ldflags 设置
+// 示例：go build -ldflags "-X main.Version=v1.2.3"
 var Version = "dev"
 
 func main() {
-	// Initialize logger first
-	logger.InitLogger(false) // Default to info level, will be updated based on flags
+	// 使用默认 info 级别初始化日志记录器
+	logger.InitLogger(false)
 
-	// Load env-file if it exists
+	// 加载环境文件
+	loadEnvironmentFiles()
+
+	// 创建并运行 CLI 应用程序
+	app := createCLIApp()
+	if err := app.Run(os.Args); err != nil {
+		logger.Fatalf("%v", err)
+	}
+}
+
+// loadEnvironmentFiles 从各种来源加载环境配置
+func loadEnvironmentFiles() {
+	// 如果指定了自定义 env 文件则加载
 	if filename, found := os.LookupEnv("PLUGIN_ENV_FILE"); found {
 		if err := godotenv.Load(filename); err != nil && !os.IsNotExist(err) {
 			logger.Warningf("failed to load env file %s: %v", filename, err)
 		}
 	}
+
+	// 如果可用则加载 Drone CI 环境
 	if _, err := os.Stat("/run/drone/env"); err == nil {
 		if err := godotenv.Overload("/run/drone/env"); err != nil {
 			logger.Warningf("failed to load /run/drone/env: %v", err)
 		}
 	}
+}
 
-	app := cli.NewApp()
-	app.Usage = "login to DevOps, query deploy versions, and deploy programs"
-	app.Copyright = "Copyright (c) 2025"
-	app.Authors = []*cli.Author{
-		{
-			Name:  "leganck",
-			Email: "leganck@outlook.com",
+// createCLIApp 创建并配置 CLI 应用程序
+func createCLIApp() *cli.App {
+	return &cli.App{
+		Name:     "go-devops",
+		Usage:    "login to DevOps, query deploy versions, and deploy programs",
+		Version:  Version,
+		Copyright: "Copyright (c) 2025",
+		Authors: []*cli.Author{
+			{
+				Name:  "leganck",
+				Email: "leganck@outlook.com",
+			},
 		},
+		Action: run,
+		Flags:  createCLIFlags(),
 	}
-	app.Action = run
-	app.Version = Version
-	app.Flags = []cli.Flag{
+}
+
+// createCLIFlags 创建 CLI 标志
+func createCLIFlags() []cli.Flag {
+	return []cli.Flag{
 		&cli.StringFlag{
 			Name:    "host",
 			Usage:   "DevOps base URL",
@@ -85,7 +110,6 @@ func main() {
 			Usage:   "Server alias to check or deploy to (e.g. dev2-zd1-erp-chain)",
 			EnvVars: []string{"PLUGIN_SERVER", "DEVOPS_SERVER", "SERVER"},
 		},
-
 		&cli.StringFlag{
 			Name:    "notify-user",
 			Usage:   "Users to notify on deployment",
@@ -102,17 +126,14 @@ func main() {
 			EnvVars: []string{"PLUGIN_WAIT", "DEVOPS_WAIT", "WAIT"},
 		},
 	}
-
-	if err := app.Run(os.Args); err != nil {
-		logger.Fatalf("%v", err)
-	}
 }
 
-// run is the CLI entrypoint
+// run 是创建并执行插件的 CLI 入口点
 func run(c *cli.Context) error {
-	// Reinitialize logger with debug flag from CLI
+	// 使用来自 CLI 的调试标志重新初始化日志记录器
 	logger.InitLogger(c.Bool("debug"))
 
+	// 从 CLI 上下文创建插件配置
 	plugin := &Plugin{
 		BaseURL:        c.String("host"),
 		Username:       c.String("username"),

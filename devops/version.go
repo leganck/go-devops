@@ -6,24 +6,25 @@ import (
 	"net/url"
 )
 
-// VersionItem represents a deploy version entry
+// VersionItem 表示来自 API 的部署版本条目
 type VersionItem struct {
-	RelativePath string `json:"relativePath"`
-	Version      string `json:"version"`
-	ModifyTime   string `json:"modifyTime"`
-	Size         string `json:"size"`
+	RelativePath string `json:"relativePath"` // 版本文件的相对路径
+	Version      string `json:"version"`      // 版本标识符（例如 "1.0.0"）
+	ModifyTime   string `json:"modifyTime"`   // 最后修改时间戳
+	Size         string `json:"size"`         // 文件大小
 }
 
-// VersionRequest for version query
+// VersionRequest 包含查询程序版本的参数
 type VersionRequest struct {
-	ProgramAliasName string `json:"programAliasName"`
-	ProgramType      string `json:"programType"`
-	EnvName          string `json:"envName"`
+	ProgramAliasName string `json:"programAliasName"` // 程序别名标识符
+	ProgramType      string `json:"programType"`      // 程序类型（例如 "snapshots"、"releases"）
+	EnvName          string `json:"envName"`          // 环境名称（例如 "dev2"、"test"）
 }
 
-// GetVersion queries version list
+// GetVersion 查询程序的可用版本列表
+// 需要对指定环境具有 "deployProgram:page" 权限。
+// 返回包含版本信息的 VersionItem 切片。
 func (d *DevOps) GetVersion(ctx context.Context, req *VersionRequest) ([]VersionItem, error) {
-	// Check permission
 	if !d.hasPermission("deployProgram:page", req.EnvName) {
 		return nil, fmt.Errorf("permission denied: missing deployProgram:page permission for environment %s", req.EnvName)
 	}
@@ -35,8 +36,7 @@ func (d *DevOps) GetVersion(ctx context.Context, req *VersionRequest) ([]Version
 	}
 
 	var versions []VersionItem
-	err := d.PostRequest(ctx, "/deployProgram/version", params, &versions)
-	if err != nil {
+	if err := d.PostRequest(ctx, "/deployProgram/version", params, &versions); err != nil {
 		return nil, err
 	}
 
