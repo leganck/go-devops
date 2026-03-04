@@ -15,13 +15,14 @@
 
 ## 📖 简介
 
-`go-devops` 是一个基于 Go 语言开发的命令行工具，用于与 smartpos.top DevOps API 交互。它提供了一套完整的部署解决方案，支持并发部署、自动重试、版本模糊匹配等功能。
+`go-devops` 是一个基于 Go 语言开发的命令行工具，用于与 smartpos.top DevOps API 交互。它提供了一套完整的部署解决方案，支持并发部署、SSH 失败自动重试、桌面通知、版本模糊匹配等功能。
 
 ### ✨ 核心特性
 
 - 🔐 **安全认证** - 支持用户名密码登录，会话自动管理
 - 🚀 **并发部署** - 使用 goroutine 并发监听多个服务器部署任务
-- 🔄 **智能重试** - SSH 连接失败时自动重试失败的服务器
+- 🔄 **智能重试** - SSH 连接失败时自动重试失败的服务器（最多 2 次）
+- 🔔 **桌面通知** - 部署开始、成功、失败、重试时发送系统通知
 - 🎯 **版本匹配** - 支持精确匹配和模糊匹配版本号
 - 📊 **结构化日志** - 详细的日志输出，支持调试模式
 - 🌍 **环境变量** - 灵活的配置方式，支持 `.env` 文件
@@ -58,6 +59,8 @@ go install
 ```bash
 # 部署程序到指定服务器
 go-devops deploy \
+  -u admin \
+  -p password \
   -a smartpos-svc-erp-chain \
   -e dev2 \
   -v 1.0.0 \
@@ -72,11 +75,13 @@ go-devops deploy \
 cat > .env << EOF
 DEVOPS_USERNAME=admin
 DEVOPS_PASSWORD=your_password
-DEVOPS_HOST=https://devops.example.com
+DEVOPS_URL=https://devops.example.com
+DEVOPS_PROGRAM_ALIAS=smartpos-svc-erp-chain
+DEVOPS_ENV=dev2
 EOF
 
 # 运行命令
-go-devops deploy -a my-app -e dev2 -v 1.0.0 --wait
+go-devops deploy -e dev2 -v 1.0.0 --wait
 ```
 
 ---
@@ -87,10 +92,10 @@ go-devops deploy -a my-app -e dev2 -v 1.0.0 --wait
 
 | 选项 | 简写 | 描述 | 默认值 | 环境变量 |
 |------|------|------|--------|----------|
-| `--host` | | DevOps API 地址 | `https://devops.example.com` | `DEVOPS_HOST` |
-| `--username` | `-u` | 登录用户名 | | `DEVOPS_USERNAME` |
-| `--password` | `-p` | 登录密码 | | `DEVOPS_PASSWORD` |
-| `--debug` | | 启用调试模式 | `false` | `DEVOPS_DEBUG` |
+| `--host` | `-H` | DevOps API 地址 | `https://devops.example.com` | `DEVOPS_URL`, `URL` |
+| `--username` | `-u` | 登录用户名 | | `DEVOPS_USERNAME`, `USERNAME` |
+| `--password` | `-p` | 登录密码 | | `DEVOPS_PASSWORD`, `PASSWORD` |
+| `--debug` | | 启用调试模式 | `false` | `DEVOPS_DEBUG`, `DEBUG` |
 
 ### 子命令
 
@@ -118,7 +123,7 @@ go-devops deploy [选项]
 # 部署到单个服务器
 go-devops deploy -a my-app -e dev2 -v 1.0.0 -s server-1 --wait
 
-# 部署到所有服务器
+# 并发部署到所有服务器
 go-devops deploy -a my-app -e dev2 -v 1.0.0 --wait
 
 # 部署并通知相关人员
@@ -232,6 +237,23 @@ go-devops version -a my-app -e dev2 -t releases
 
 ---
 
+## 🔔 桌面通知
+
+工具支持桌面通知功能，在以下情况下会自动发送通知：
+
+| 通知类型 | 触发时机 |
+|----------|----------|
+| 部署已启动 | 部署任务开始执行 |
+| 部署完成 | 所有服务器部署成功 |
+| 部署失败 | 部署任务失败 |
+| 部署部分失败 | 部分服务器部署失败 |
+| SSH 重试 | SSH 连接失败，准备重试 |
+| 重新部署开始 | 开始重新部署到失败的服务器 |
+
+通知通过系统通知中心发送，无需额外配置。
+
+---
+
 ## 🔧 配置
 
 ### 环境变量
@@ -240,7 +262,7 @@ go-devops version -a my-app -e dev2 -t releases
 
 ```bash
 # 认证信息
-export DEVOPS_HOST=https://devops.example.com
+export DEVOPS_URL=https://devops.example.com
 export DEVOPS_USERNAME=admin
 export DEVOPS_PASSWORD=your_password
 
@@ -260,10 +282,11 @@ go-devops deploy --wait
 
 ```bash
 # .env
-DEVOPS_HOST=https://devops.example.com
+DEVOPS_URL=https://devops.example.com
 DEVOPS_USERNAME=admin
 DEVOPS_PASSWORD=your_password
 DEVOPS_ENV=dev2
+DEVOPS_PROGRAM_ALIAS=my-app
 ```
 
 ---
@@ -300,6 +323,7 @@ go-devops/
 │   ├── deploy_execute.go    # 部署执行逻辑
 │   ├── deploy_monitor.go    # 并发监听与重试
 │   ├── deploy_helpers.go    # 部署辅助函数
+│   ├── deploy_notification.go # 桌面通知
 │   ├── envs.go              # 环境列表命令
 │   ├── programs.go          # 程序列表命令
 │   ├── servers.go           # 服务器列表命令
@@ -331,6 +355,8 @@ go-devops/
 | `github.com/sirupsen/logrus` | v1.9.3 | 结构化日志 |
 | `github.com/joho/godotenv` | v1.5.1 | 环境变量加载 |
 | `golang.org/x/sync` | v0.10.0 | 并发控制 |
+| `github.com/gen2brain/beeep` | v0.11.2 | 桌面通知 |
+| `github.com/PuerkitoBio/goquery` | v1.11.0 | HTML 解析 |
 
 ### 构建命令
 
