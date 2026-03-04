@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"go-devops/internal/errors"
 	"go-devops/internal/logger"
 
 	"github.com/urfave/cli/v2"

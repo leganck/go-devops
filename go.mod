@@ -10,6 +10,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/yassinebenaid/godump v0.11.1
+	golang.org/x/sync v0.10.0
 )
 
 require (
