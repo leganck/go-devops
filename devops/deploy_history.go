@@ -58,7 +58,7 @@ type DeployHistoryResult struct {
 // 结果支持分页，并可按状态和程序过滤。
 func (d *DevOps) GetDeployHistory(ctx context.Context, req *DeployHistoryRequest) (*DeployHistoryResult, error) {
 	if !d.hasPermission("deployHistory:list", req.EnvName) {
-		return nil, fmt.Errorf("permission denied: missing deployHistory:list permission for environment %s", req.EnvName)
+		return nil, fmt.Errorf("权限被拒绝：缺少环境 %s 的 deployHistory:list 权限", req.EnvName)
 	}
 
 	params := d.buildHistoryParams(req)

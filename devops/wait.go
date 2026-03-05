@@ -34,7 +34,7 @@ func (d *DevOps) checkDeployStatus(ctx context.Context, taskID string) error {
 	}
 	historyResult, err := d.GetDeployHistory(ctx, historyReq)
 	if err != nil {
-		return fmt.Errorf("failed to get deploy history: %w", err)
+		return fmt.Errorf("获取部署历史失败: %w", err)
 	}
 
 	// 在结果中查找 ID 匹配的任务
@@ -48,7 +48,7 @@ func (d *DevOps) checkDeployStatus(ctx context.Context, taskID string) error {
 	}
 
 	if targetTask == nil {
-		return fmt.Errorf("task %s not found in deploy history", taskID)
+		return fmt.Errorf("在部署历史中未找到任务 %s", taskID)
 	}
 
 	return d.evaluateDeployStatus(targetTask, taskID)
@@ -56,30 +56,31 @@ func (d *DevOps) checkDeployStatus(ctx context.Context, taskID string) error {
 
 // evaluateDeployStatus 评估部署状态并返回相应的错误或 nil
 func (d *DevOps) evaluateDeployStatus(task *DeployHistoryItem, taskID string) error {
+	serviceName := task.ServerAlias
 	switch task.DeployStatus {
 	case DeployStatusSuccess:
-		logger.Infof("task %s completed successfully (status: %d, description: %s)",
-			taskID, task.DeployStatus, task.DeployDesc)
+		logger.Infof("[%s] 任务 %s 已成功完成（状态: %d, 描述: %s）",
+			serviceName, taskID, task.DeployStatus, task.DeployDesc)
 		return nil
 
 	case DeployStatusFailed:
-		logger.Errorf("task %s failed with status: %d, description: %s",
-			taskID, task.DeployStatus, task.DeployDesc)
+		logger.Errorf("[%s] 任务 %s 失败（状态: %d, 描述: %s）",
+			serviceName, taskID, task.DeployStatus, task.DeployDesc)
 		// 检查是否为 SSH 错误以便重试
 		if d.isSSHError(task.DeployDesc) {
-			logger.Errorf("task %s failed with SSH error, will return SSH-specific error for potential retry", taskID)
+			logger.Errorf("[%s] 任务 %s 因 SSH 错误失败，将返回 SSH 特定错误以便可能的重试", serviceName, taskID)
 			return ErrSSHDeploymentFailed
 		}
-		return fmt.Errorf("deployment task %s failed: %s", taskID, task.DeployDesc)
+		return fmt.Errorf("部署任务 %s 失败: %s", taskID, task.DeployDesc)
 
 	case DeployStatusCancelled:
-		logger.Errorf("task %s was cancelled (status: %d, description: %s)",
-			taskID, task.DeployStatus, task.DeployDesc)
-		return fmt.Errorf("deployment task %s was cancelled: %s", taskID, task.DeployDesc)
+		logger.Errorf("[%s] 任务 %s 已取消（状态: %d, 描述: %s）",
+			serviceName, taskID, task.DeployStatus, task.DeployDesc)
+		return fmt.Errorf("部署任务 %s 已取消: %s", taskID, task.DeployDesc)
 
 	default:
-		logger.Infof("task %s is still in progress (status: %d, description: %s), waiting...",
-			taskID, task.DeployStatus, task.DeployDesc)
+		logger.Infof("[%s] 任务 %s 仍在进行中（状态: %d, 描述: %s），等待中...",
+			serviceName, taskID, task.DeployStatus, task.DeployDesc)
 		return ErrTaskInProgress
 	}
 }

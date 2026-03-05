@@ -16,7 +16,7 @@ type ProgramAliasRequest struct {
 // 返回程序别名的名称切片。
 func (d *DevOps) GetProgramAliases(ctx context.Context, req *ProgramAliasRequest) ([]string, error) {
 	if !d.hasPermission("deployProgram:page", req.EnvName) {
-		return nil, fmt.Errorf("permission denied: missing deployProgram:page permission for environment %s", req.EnvName)
+		return nil, fmt.Errorf("权限被拒绝：缺少环境 %s 的 deployProgram:page 权限", req.EnvName)
 	}
 
 	params := url.Values{

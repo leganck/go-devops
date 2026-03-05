@@ -40,7 +40,7 @@ type Server struct {
 //   - error: 权限不足或 API 请求失败时返回错误
 func (d *DevOps) GetServers(ctx context.Context, req *ServerRequest) ([][]Server, error) {
 	if !d.hasPermission("deployProgram:page", req.EnvName) {
-		return nil, fmt.Errorf("permission denied: missing deployProgram:page permission for environment %s", req.EnvName)
+		return nil, fmt.Errorf("权限被拒绝：缺少环境 %s 的 deployProgram:page 权限", req.EnvName)
 	}
 
 	params := url.Values{

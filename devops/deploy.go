@@ -41,7 +41,7 @@ type DeployRequest struct {
 //   使用 WaitForDeployCompletion 方法来监控部署进度。
 func (d *DevOps) Deploy(ctx context.Context, req *DeployRequest) error {
 	if !d.hasPermission("deployProgram:page", req.EnvName) {
-		return fmt.Errorf("permission denied: missing deployProgram:page permission for environment %s", req.EnvName)
+		return fmt.Errorf("权限被拒绝：缺少环境 %s 的 deployProgram:page 权限", req.EnvName)
 	}
 
 	params := d.buildDeployParams(req)

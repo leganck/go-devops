@@ -42,31 +42,31 @@ type LoginData struct {
 // 它从登录页面获取 RSA 公钥，加密密码，并发送登录请求。权限被缓存用于权限检查。
 func (d *DevOps) Login(ctx context.Context) error {
 	if d.Auth == nil {
-		return fmt.Errorf("auth not configured")
+		return fmt.Errorf("认证未配置")
 	}
 	if d.Auth.Username == "" {
-		return fmt.Errorf("username is required")
+		return fmt.Errorf("用户名为必填项")
 	}
 	if d.Auth.Password == "" {
-		return fmt.Errorf("password is required")
+		return fmt.Errorf("密码为必填项")
 	}
 
 	pubKeyStr, err := d.fetchLoginPage(ctx)
 	if err != nil {
-		return fmt.Errorf("fetch login page: %w", err)
+		return fmt.Errorf("获取登录页失败: %w", err)
 	}
 
 	if d.pubKey == nil {
 		pubKey, err := parseRSAPublicKey(pubKeyStr)
 		if err != nil {
-			return fmt.Errorf("parse public key: %w", err)
+			return fmt.Errorf("解析公钥失败: %w", err)
 		}
 		d.pubKey = pubKey
 	}
 
 	encPass, err := rsaEncrypt(d.Auth.Password, d.pubKey.(*rsa.PublicKey))
 	if err != nil {
-		return fmt.Errorf("encrypt password: %w", err)
+		return fmt.Errorf("加密密码失败: %w", err)
 	}
 
 	params := url.Values{
@@ -76,27 +76,27 @@ func (d *DevOps) Login(ctx context.Context) error {
 
 	resp, err := d.postForm(ctx, "/auth/form", params)
 	if err != nil {
-		return fmt.Errorf("POST /auth/form: %w", err)
+		return fmt.Errorf("POST /auth/form 请求失败: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("read login response: %w", err)
+		return fmt.Errorf("读取登录响应失败: %w", err)
 	}
 
 	var apiResp APIResponse
 	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return fmt.Errorf("parse login JSON: %w (raw: %.200s)", err, string(body))
+		return fmt.Errorf("解析登录 JSON 失败: %w (原始: %.200s)", err, string(body))
 	}
 
 	if !apiResp.IsSuccess() {
-		return fmt.Errorf("login failed: code=%d, msg=%q", apiResp.Code, apiResp.Msg)
+		return fmt.Errorf("登录失败: code=%d, msg=%q", apiResp.Code, apiResp.Msg)
 	}
 
 	var loginData LoginData
 	if err := apiResp.WithData(&loginData); err != nil {
-		return fmt.Errorf("parse login data: %w", err)
+		return fmt.Errorf("解析登录数据失败: %w", err)
 	}
 
 	d.Authorities = &loginData.Authorities
@@ -112,14 +112,14 @@ func (d *DevOps) logLoginSuccess(data *LoginData) {
 		return
 	}
 
-	logger.Debugf("[DEBUG] Login success: redirect=%q, menus=%d, authorities=%d",
+	logger.Debugf("[DEBUG] 登录成功: 重定向=%q, 菜单=%d, 权限=%d",
 		data.RedirectURL,
 		len(data.UserMenu),
 		len(data.Authorities))
 
-	logger.Debug("=== Debug Mode: Login Data ===")
+	logger.Debug("=== 调试模式: 登录数据 ===")
 	if err := godump.Dump(data); err != nil {
-		logger.Warningf("failed to dump login data: %v", err)
+		logger.Warningf("转储登录数据失败: %v", err)
 	}
 	logger.Debug("==============================")
 }
@@ -128,22 +128,22 @@ func (d *DevOps) logLoginSuccess(data *LoginData) {
 func (d *DevOps) fetchLoginPage(ctx context.Context) (string, error) {
 	resp, err := d.get(ctx, "/public/login")
 	if err != nil {
-		return "", fmt.Errorf("GET /public/login: %w", err)
+		return "", fmt.Errorf("GET /public/login 失败: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GET /public/login: unexpected status %d", resp.StatusCode)
+		return "", fmt.Errorf("GET /public/login: 意外的状态码 %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("read login page: %w", err)
+		return "", fmt.Errorf("读取登录页失败: %w", err)
 	}
 
 	pubKeyStr, err := extractRSAPublicKey(string(body))
 	if err != nil {
-		return "", fmt.Errorf("extract public key: %w", err)
+		return "", fmt.Errorf("提取公钥失败: %w", err)
 	}
 
 	return pubKeyStr, nil
@@ -153,7 +153,7 @@ func (d *DevOps) fetchLoginPage(ctx context.Context) (string, error) {
 func extractRSAPublicKey(html string) (string, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
 	if err != nil {
-		return "", fmt.Errorf("parse HTML: %w", err)
+		return "", fmt.Errorf("解析 HTML 失败: %w", err)
 	}
 
 	var script string
@@ -165,13 +165,13 @@ func extractRSAPublicKey(html string) (string, error) {
 	})
 
 	if script == "" {
-		return "", fmt.Errorf("rsaPlublic script not found in login page")
+		return "", fmt.Errorf("在登录页面中未找到 rsaPlublic 脚本")
 	}
 
 	re := regexp.MustCompile(rsaPublicKeyPattern)
 	matches := re.FindStringSubmatch(script)
 	if len(matches) < 2 {
-		return "", fmt.Errorf("rsaPlublic value not matched by regex")
+		return "", fmt.Errorf("rsaPlublic 值未被正则表达式匹配")
 	}
 
 	return processEscapedPublicKey(matches[1]), nil
@@ -189,17 +189,17 @@ func parseRSAPublicKey(s string) (*rsa.PublicKey, error) {
 	pemBlock := fmt.Sprintf("-----BEGIN PUBLIC KEY-----\n%s\n-----END PUBLIC KEY-----", s)
 	block, _ := pem.Decode([]byte(pemBlock))
 	if block == nil || block.Type != "PUBLIC KEY" {
-		return nil, fmt.Errorf("invalid PEM block: expected PUBLIC KEY")
+		return nil, fmt.Errorf("无效的 PEM 块：期望为 PUBLIC KEY")
 	}
 
 	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("parse PKIX public key: %w", err)
+		return nil, fmt.Errorf("解析 PKIX 公钥失败: %w", err)
 	}
 
 	pk, ok := pub.(*rsa.PublicKey)
 	if !ok {
-		return nil, fmt.Errorf("public key is not RSA")
+		return nil, fmt.Errorf("公钥不是 RSA 类型")
 	}
 
 	return pk, nil
@@ -209,7 +209,7 @@ func parseRSAPublicKey(s string) (*rsa.PublicKey, error) {
 func rsaEncrypt(plain string, pub *rsa.PublicKey) (string, error) {
 	ciphertext, err := rsa.EncryptPKCS1v15(rand.Reader, pub, []byte(plain))
 	if err != nil {
-		return "", fmt.Errorf("RSA encrypt: %w", err)
+		return "", fmt.Errorf("RSA 加密失败: %w", err)
 	}
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
