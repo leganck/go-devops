@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"bytes"
 	"io"
 	"os"
 
@@ -33,10 +34,9 @@ var global Logger = &logrusLogger{Logger: logrus.New()}
 func InitLogger(debug bool) {
 	logger := logrus.New()
 
-	// 设置日志格式
-	logger.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp:   true,
-		TimestampFormat: "2006/01/02 15:04:05",
+	// 设置日志格式为简单的时间戳 + 消息格式
+	logger.SetFormatter(&simpleFormatter{
+		timestampFormat: "2006/01/02 15:04:05",
 	})
 
 	// 设置输出
@@ -50,6 +50,29 @@ func InitLogger(debug bool) {
 	}
 
 	global = &logrusLogger{Logger: logger}
+}
+
+// simpleFormatter 自定义格式化器，输出格式为: 2006/01/02 15:04:05 message
+type simpleFormatter struct {
+	timestampFormat string
+}
+
+// Format 实现 logrus.Formatter 接口
+func (f *simpleFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+	var b *bytes.Buffer
+	if entry.Buffer != nil {
+		b = entry.Buffer
+	} else {
+		b = &bytes.Buffer{}
+	}
+
+	// 格式: 2006/01/02 15:04:05 message
+	b.WriteString(entry.Time.Format(f.timestampFormat))
+	b.WriteString(" ")
+	b.WriteString(entry.Message)
+	b.WriteByte('\n')
+
+	return b.Bytes(), nil
 }
 
 // SetOutput 设置日志记录器的输出目标
