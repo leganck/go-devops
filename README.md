@@ -23,6 +23,7 @@
 - **桌面通知** - 部署开始、成功、失败、重试时发送系统通知
 - **版本匹配** - 支持精确匹配和模糊匹配版本号
 - **SQL 查询** - 通过 DevOps `/dsourceDbexec` API 浏览数据源并执行 SQL（与 devops-jdbc-driver 同源）
+- **程序日志** - 通过 `/programlog` API 检索 SLS/ES 程序日志（与 Web「程序日志」页同源）
 - **结构化日志** - 详细的日志输出，支持调试模式
 - **环境变量** - 灵活的配置方式，支持 `.env` 文件
 - **高性能** - 基于 Go 语言的协程实现，部署效率高
@@ -265,6 +266,49 @@ go-devops sql exec -e www_ali -d erp --sql "SELECT * FROM user" --all
 echo "SELECT 1 AS n" | go-devops sql exec -e www_ali -d erp --json
 ```
 
+#### 7. `logs` - 程序日志查询
+
+通过 DevOps `/programlog` API 查询程序日志（与 Web「程序日志」页同源，非直连 SLS/ES）。
+
+`projectName` 规则：`{环境}-{服务器组}-{程序别名}`，例如 `www_ali-z0-smartpos-svc-erp`。
+
+```bash
+go-devops logs <子命令> [选项]
+```
+
+| 子命令 | 说明 |
+|--------|------|
+| `projects` | 列出环境下的日志项目（`env-group-alias`） |
+| `query` | 查询程序日志 |
+
+| 选项 | 简写 | 描述 | 环境变量 |
+|------|------|------|----------|
+| `--env` | `-e` | 环境名称 | `DEVOPS_ENV` |
+| `--group` | `-g` | 服务器组（可省略，自动解析） | `DEVOPS_GROUP` |
+| `--program-alias` | `-a` | 程序别名 | `DEVOPS_PROGRAM_ALIAS` |
+| `--project` | | 完整 projectName（优先） | `DEVOPS_LOG_PROJECT` |
+| `--time` | | 时间范围 `MM-dd HH:mm:ss ~ MM-dd HH:mm:ss` | |
+| `--since` | | 相对时长（如 `2h`）；未指定 `--time` 时生效 | |
+| `--level` | | `INFO\|ERROR\|DEBUG\|WARN\|TRACE` | |
+| `--thread` | | 线程名前缀 | |
+| `--query` / `--unquery` | | message 包含 / 排除关键字 | |
+| `--page` / `--limit` | | 分页（limit 1–500，默认 50） | |
+| `--json` | | JSON 输出 | |
+| `--verbose` | | 表格增加 LOCATION/TOPIC | |
+
+**推荐工作流（尤其适合 AI）：**
+
+```bash
+# 1. 先发现可用 projectName
+go-devops logs projects -e www_ali --json
+
+# 2. 再查询（可省略 -g；多组命中时会提示候选）
+go-devops logs query -e www_ali -a smartpos-svc-erp --level ERROR --since 2h
+
+# 或显式指定
+go-devops logs query --project www_ali-z0-smartpos-svc-erp --query timeout --limit 100
+```
+
 ---
 
 ## 版本匹配
@@ -322,6 +366,10 @@ export DEVOPS_PROJECT_VERSION=1.0.0
 # SQL 查询（可选）
 export DEVOPS_DATASOURCE=erp
 export DEVOPS_TABLE=user
+
+# 程序日志（可选）
+export DEVOPS_GROUP=z0
+export DEVOPS_LOG_PROJECT=www_ali-z0-smartpos-svc-erp
 
 # 自定义 .env 文件路径
 export PLUGIN_ENV_FILE=/path/to/custom.env
@@ -383,6 +431,7 @@ go-devops/
 │   ├── servers.go           # 服务器列表命令
 │   ├── version.go           # 版本查询命令
 │   ├── sql.go               # SQL 查询命令
+│   ├── logs.go              # 程序日志命令
 │   └── client.go            # 客户端创建
 ├── devops/                  # DevOps API 客户端
 │   ├── devops.go            # 客户端核心
@@ -394,6 +443,8 @@ go-devops/
 │   ├── version.go           # 版本
 │   ├── sql.go               # 数据源 SQL API
 │   ├── sql_test.go          # SQL 解析单测
+│   ├── program_log.go       # 程序日志 API
+│   ├── program_log_test.go  # 程序日志单测
 │   └── wait.go              # 等待完成
 ├── internal/                # 内部包
 │   ├── errors/              # 错误处理
