@@ -6,6 +6,7 @@
 //   - servers: 查询程序可用服务器
 //   - programs: 查询环境中的程序列表
 //   - envs: 查询可用的环境列表
+//   - sql: 通过 DevOps 数据源执行 SQL 查询与元数据浏览
 //
 // 全局配置选项：
 //   - host (-H): DevOps API 基础 URL
@@ -66,6 +67,7 @@ func NewApp() *cli.App {
 			serversCommand(),
 			programsCommand(),
 			envsCommand(),
+			sqlCommand(),
 		},
 	}
 }

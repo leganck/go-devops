@@ -22,6 +22,7 @@
 - **智能重试** - SSH 连接失败时自动重试失败的服务器（最多 2 次）
 - **桌面通知** - 部署开始、成功、失败、重试时发送系统通知
 - **版本匹配** - 支持精确匹配和模糊匹配版本号
+- **SQL 查询** - 通过 DevOps `/dsourceDbexec` API 浏览数据源并执行 SQL（与 devops-jdbc-driver 同源）
 - **结构化日志** - 详细的日志输出，支持调试模式
 - **环境变量** - 灵活的配置方式，支持 `.env` 文件
 - **高性能** - 基于 Go 语言的协程实现，部署效率高
@@ -216,6 +217,54 @@ go-devops version -a my-app -e dev2
 go-devops version -a my-app -e dev2 -t releases
 ```
 
+#### 6. `sql` - SQL 查询
+
+通过 DevOps 数据源 API 浏览元数据并执行 SQL（与 DataGrip 使用的 `devops-jdbc-driver` 同一套后端接口，非直连数据库）。
+
+```bash
+go-devops sql <子命令> [选项]
+```
+
+| 子命令 | 说明 |
+|--------|------|
+| `databases` | 列出环境下的数据源 |
+| `tables` | 列出数据源下的表 |
+| `describe` | 查看表结构 |
+| `exec` | 执行 SQL |
+
+| 选项 | 简写 | 描述 | 环境变量 |
+|------|------|------|----------|
+| `--env` | `-e` | 环境名称 | `DEVOPS_ENV` |
+| `--datasource` | `-d` | 数据源（支持 catalog name 或 datasourceName） | `DEVOPS_DATASOURCE` |
+| `--table` | `-t` | 表名（`describe`） | `DEVOPS_TABLE` |
+| `--sql` | | SQL 语句；为空时从 stdin 读取（`exec`） | `DEVOPS_SQL` |
+| `--page` | | 页码，从 1 开始（`exec`） | |
+| `--limit` | | 每页行数，1–5000，默认 500（`exec`） | |
+| `--all` | | select 自动翻页合并结果（`exec`） | |
+| `--json` | | JSON 格式输出 | |
+
+**示例：**
+
+```bash
+# 列出数据源
+go-devops sql databases -e www_ali
+
+# 列出表
+go-devops sql tables -e www_ali -d erp
+
+# 查看表结构
+go-devops sql describe -e www_ali -d erp -t user
+
+# 执行查询（单页）
+go-devops sql exec -e www_ali -d erp --sql "SELECT id, name FROM user LIMIT 10"
+
+# 自动翻页合并
+go-devops sql exec -e www_ali -d erp --sql "SELECT * FROM user" --all
+
+# 管道传入 SQL，JSON 输出
+echo "SELECT 1 AS n" | go-devops sql exec -e www_ali -d erp --json
+```
+
 ---
 
 ## 版本匹配
@@ -269,6 +318,10 @@ export DEVOPS_PROGRAM_ALIAS=my-app
 export DEVOPS_ENV=dev2
 export DEVOPS_PROGRAM_TYPE=snapshots
 export DEVOPS_PROJECT_VERSION=1.0.0
+
+# SQL 查询（可选）
+export DEVOPS_DATASOURCE=erp
+export DEVOPS_TABLE=user
 
 # 自定义 .env 文件路径
 export PLUGIN_ENV_FILE=/path/to/custom.env
@@ -329,6 +382,7 @@ go-devops/
 │   ├── programs.go          # 程序列表命令
 │   ├── servers.go           # 服务器列表命令
 │   ├── version.go           # 版本查询命令
+│   ├── sql.go               # SQL 查询命令
 │   └── client.go            # 客户端创建
 ├── devops/                  # DevOps API 客户端
 │   ├── devops.go            # 客户端核心
@@ -338,6 +392,8 @@ go-devops/
 │   ├── program_alias.go     # 程序别名
 │   ├── server.go            # 服务器
 │   ├── version.go           # 版本
+│   ├── sql.go               # 数据源 SQL API
+│   ├── sql_test.go          # SQL 解析单测
 │   └── wait.go              # 等待完成
 ├── internal/                # 内部包
 │   ├── errors/              # 错误处理
