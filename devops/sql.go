@@ -138,7 +138,53 @@ func (d *DevOps) ResolveDatasource(ctx context.Context, envName, nameOrDatasourc
 	if byDatasource != nil {
 		return byDatasource, nil
 	}
-	return nil, fmt.Errorf("未找到数据源: %s", nameOrDatasource)
+	return nil, fmt.Errorf("未找到数据源: %s；候选: %s（可先执行: go-devops sql databases -e %s）",
+		nameOrDatasource, FormatDatabaseCandidates(dbs, 8), envName)
+}
+
+// ResolveOrDefaultDatasource 解析数据源；name 为空时若环境仅 1 个数据源则自动选用。
+func (d *DevOps) ResolveOrDefaultDatasource(ctx context.Context, envName, nameOrDatasource string) (*DatabaseInfo, error) {
+	nameOrDatasource = strings.TrimSpace(nameOrDatasource)
+	if nameOrDatasource != "" {
+		return d.ResolveDatasource(ctx, envName, nameOrDatasource)
+	}
+
+	dbs, err := d.ListDatabases(ctx, envName)
+	if err != nil {
+		return nil, err
+	}
+	switch len(dbs) {
+	case 0:
+		return nil, fmt.Errorf("环境 %s 没有可用数据源", envName)
+	case 1:
+		return &dbs[0], nil
+	default:
+		return nil, fmt.Errorf("环境 %s 有多个数据源，请使用 -d 指定。候选: %s",
+			envName, FormatDatabaseCandidates(dbs, 8))
+	}
+}
+
+// FormatDatabaseCandidates 格式化数据源候选列表。
+func FormatDatabaseCandidates(dbs []DatabaseInfo, max int) string {
+	if len(dbs) == 0 {
+		return "(无)"
+	}
+	if max <= 0 {
+		max = 8
+	}
+	parts := make([]string, 0, max)
+	for i, db := range dbs {
+		if i >= max {
+			parts = append(parts, "...")
+			break
+		}
+		if db.Name != "" && db.Name != db.DatasourceName {
+			parts = append(parts, fmt.Sprintf("%s(%s)", db.Name, db.DatasourceName))
+		} else {
+			parts = append(parts, db.DatasourceName)
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // ListTables 查询指定数据源下的表名列表。

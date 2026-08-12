@@ -33,19 +33,16 @@ func checkProgramExists(ctx context.Context, client *devops.DevOps, programAlias
 
 // queryVersion 查询版本并返回匹配的版本路径
 //
-// 先尝试精确匹配，如果失败则尝试模糊匹配
+// 先尝试精确匹配，如果失败则尝试模糊匹配。
+// 当 TypeFallback 且默认 snapshots 结果为空时，自动尝试 releases。
 func queryVersion(ctx context.Context, client *devops.DevOps, opts *DeployOptions) (string, string, error) {
-	logger.Infof("查询 %s (%s/%s) 的版本...", opts.ProgramAlias, opts.ProgramType, opts.Env)
-
-	versions, err := client.GetVersion(ctx, &devops.VersionRequest{
-		ProgramAliasName: opts.ProgramAlias,
-		ProgramType:      opts.ProgramType,
-		EnvName:          opts.Env,
-	})
+	versions, programType, err := fetchVersionsWithFallback(ctx, client, opts.ProgramAlias, opts.Env, opts.ProgramType, opts.TypeFallback)
 	if err != nil {
-		return "", "", errors.NewAPIError("获取版本失败", err)
+		return "", "", err
 	}
+	opts.ProgramType = programType
 
+	logger.Infof("查询 %s (%s/%s) 的版本...", opts.ProgramAlias, opts.ProgramType, opts.Env)
 	logger.Infof("找到 %d 个版本", len(versions))
 
 	// 尝试精确匹配
@@ -70,6 +67,40 @@ func queryVersion(ctx context.Context, client *devops.DevOps, opts *DeployOption
 		fmt.Sprintf("版本 %s 在环境 %s 中不存在", opts.ProjectVersion, opts.Env),
 		nil,
 	)
+}
+
+// fetchVersionsWithFallback 获取版本列表；允许时在默认 snapshots 为空后回退 releases。
+func fetchVersionsWithFallback(
+	ctx context.Context,
+	client *devops.DevOps,
+	programAlias, env, programType string,
+	typeFallback bool,
+) ([]devops.VersionItem, string, error) {
+	versions, err := client.GetVersion(ctx, &devops.VersionRequest{
+		ProgramAliasName: programAlias,
+		ProgramType:      programType,
+		EnvName:          env,
+	})
+	if err != nil {
+		return nil, "", errors.NewAPIError("获取版本失败", err)
+	}
+
+	if len(versions) == 0 && typeFallback && programType == "snapshots" {
+		alt, altErr := client.GetVersion(ctx, &devops.VersionRequest{
+			ProgramAliasName: programAlias,
+			ProgramType:      "releases",
+			EnvName:          env,
+		})
+		if altErr != nil {
+			return nil, "", errors.NewAPIError("获取版本失败", altErr)
+		}
+		if len(alt) > 0 {
+			logger.Infof("snapshots 无版本，已回退到 releases")
+			return alt, "releases", nil
+		}
+	}
+
+	return versions, programType, nil
 }
 
 // getServerIDs 获取服务器 ID 列表

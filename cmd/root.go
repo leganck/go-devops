@@ -8,6 +8,7 @@
 //   - envs: 查询可用的环境列表
 //   - sql: 通过 DevOps 数据源执行 SQL 查询与元数据浏览
 //   - logs: 查询 DevOps 程序日志（SLS/ES）
+//   - history: 查询部署历史
 //
 // 全局配置选项：
 //   - host (-H): DevOps API 基础 URL
@@ -70,6 +71,7 @@ func NewApp() *cli.App {
 			envsCommand(),
 			sqlCommand(),
 			logsCommand(),
+			historyCommand(),
 		},
 	}
 }

@@ -22,6 +22,8 @@ func sqlCommand() *cli.Command {
 		Usage:     "通过 DevOps 数据源执行 SQL 查询与元数据浏览",
 		UsageText: "go-devops sql <子命令> [选项]",
 		Description: "调用 DevOps /dsourceDbexec API（与 devops-jdbc-driver 同源），支持数据源、表结构查询与 SQL 执行。\n\n" +
+			"推荐工作流: envs → sql databases -e → sql tables/exec -e -d ...\n" +
+			"环境仅 1 个数据源时可省略 -d。\n\n" +
 			"示例:\n" +
 			"  go-devops sql databases -e www_ali\n" +
 			"  go-devops sql tables -e www_ali -d erp\n" +
@@ -129,7 +131,7 @@ func sqlDatasourceFlag() *cli.StringFlag {
 	return &cli.StringFlag{
 		Name:    "datasource",
 		Aliases: []string{"d"},
-		Usage:   "数据源名称（支持 catalog name 或 datasourceName）",
+		Usage:   "数据源名称（支持 catalog name 或 datasourceName；环境仅 1 个时可省略）",
 		EnvVars: []string{"DEVOPS_DATASOURCE", "DATASOURCE"},
 	}
 }
@@ -180,17 +182,13 @@ func sqlTablesAction(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	dsName, err := requireDatasource(c)
-	if err != nil {
-		return err
-	}
 
 	client, err := createAndLoginClient(c.Context, getConfig(c))
 	if err != nil {
 		return err
 	}
 
-	db, err := client.ResolveDatasource(c.Context, env, dsName)
+	db, err := client.ResolveOrDefaultDatasource(c.Context, env, c.String("datasource"))
 	if err != nil {
 		return errors.NewAPIError("解析数据源失败", err)
 	}
@@ -219,10 +217,6 @@ func sqlDescribeAction(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	dsName, err := requireDatasource(c)
-	if err != nil {
-		return err
-	}
 	table := c.String("table")
 	if table == "" {
 		return errors.NewValidationError("表名不能为空", nil)
@@ -233,7 +227,7 @@ func sqlDescribeAction(c *cli.Context) error {
 		return err
 	}
 
-	db, err := client.ResolveDatasource(c.Context, env, dsName)
+	db, err := client.ResolveOrDefaultDatasource(c.Context, env, c.String("datasource"))
 	if err != nil {
 		return errors.NewAPIError("解析数据源失败", err)
 	}
@@ -281,10 +275,6 @@ func sqlExecAction(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	dsName, err := requireDatasource(c)
-	if err != nil {
-		return err
-	}
 
 	sqlText, err := readSQLText(c)
 	if err != nil {
@@ -296,7 +286,7 @@ func sqlExecAction(c *cli.Context) error {
 		return err
 	}
 
-	db, err := client.ResolveDatasource(c.Context, env, dsName)
+	db, err := client.ResolveOrDefaultDatasource(c.Context, env, c.String("datasource"))
 	if err != nil {
 		return errors.NewAPIError("解析数据源失败", err)
 	}
@@ -331,14 +321,6 @@ func requireEnv(c *cli.Context) (string, error) {
 		return "", errors.NewValidationError("环境名称不能为空", nil)
 	}
 	return env, nil
-}
-
-func requireDatasource(c *cli.Context) (string, error) {
-	ds := c.String("datasource")
-	if ds == "" {
-		return "", errors.NewValidationError("数据源名称不能为空", nil)
-	}
-	return ds, nil
 }
 
 func readSQLText(c *cli.Context) (string, error) {

@@ -17,6 +17,7 @@ func programsCommand() *cli.Command {
 		Usage:     "查询环境中的程序列表",
 		UsageText: "go-devops programs [选项]",
 		Description: "查询指定环境中的所有可用程序别名。\n\n" +
+			"推荐工作流: envs → programs -e → version/servers/deploy\n\n" +
 			"示例:\n" +
 			"  go-devops programs -e dev2",
 		Flags: []cli.Flag{

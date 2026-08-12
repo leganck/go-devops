@@ -17,6 +17,8 @@ func deployCommand() *cli.Command {
 		Usage:     "部署程序到指定服务器",
 		UsageText: "go-devops deploy [选项]",
 		Description: "部署指定版本的程序到目标服务器。支持 SSH 失败自动重试。\n\n" +
+			"推荐工作流: envs → programs -e → version -e -a → servers -e -a → deploy ...\n" +
+			"未显式指定 -t 且 snapshots 无版本时，会自动尝试 releases。\n\n" +
 			"示例:\n" +
 			"  go-devops deploy -a smartpos-svc-erp-chain -e dev2 -v 1.0.0 -s dev2-zd1-erp-chain",
 		Flags: []cli.Flag{
@@ -98,6 +100,7 @@ func deployAction(c *cli.Context) error {
 		Server:         c.String("server"),
 		NotifyUser:     c.String("notify"),
 		Wait:           c.Bool("wait"),
+		TypeFallback:   !c.IsSet("program-type"),
 	})
 }
 
@@ -110,6 +113,8 @@ type DeployOptions struct {
 	Server         string
 	NotifyUser     string
 	Wait           bool
+	// TypeFallback 为 true 表示 program-type 使用默认值，允许空结果时回退到另一类型
+	TypeFallback bool
 }
 
 // executeDeploy 执行部署流程

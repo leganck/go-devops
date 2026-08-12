@@ -24,6 +24,7 @@
 - **版本匹配** - 支持精确匹配和模糊匹配版本号
 - **SQL 查询** - 通过 DevOps `/dsourceDbexec` API 浏览数据源并执行 SQL（与 devops-jdbc-driver 同源）
 - **程序日志** - 通过 `/programlog` API 检索 SLS/ES 程序日志（与 Web「程序日志」页同源）
+- **AI 友好发现** - servers 对齐 groupName、SQL 可省略唯一数据源、版本自动回退、history 反查部署信息
 - **结构化日志** - 详细的日志输出，支持调试模式
 - **环境变量** - 灵活的配置方式，支持 `.env` 文件
 - **高性能** - 基于 Go 语言的协程实现，部署效率高
@@ -140,7 +141,7 @@ go-devops deploy -a my-app -e dev2 -v 1.0.0 --notify user1,user2 --wait
 
 #### 2. `envs` - 列出环境
 
-列出所有可用的环境。
+列出当前用户具有 `deployProgram:page` 且权限 `Envs` 非空的环境。若为全局权限（Envs 为空），列表可能为空，需显式传 `-e`。
 
 ```bash
 go-devops envs
@@ -176,7 +177,7 @@ go-devops programs -e dev2
 
 #### 4. `servers` - 列出服务器
 
-列出指定程序和环境的服务器。
+列出指定程序和环境的服务器。会尝试对齐日志项目中的 `groupName` / `projectName`（`env-group-alias`）；数量对不上时 GROUP/PROJECT 显示为 `-`。
 
 ```bash
 go-devops servers -a <程序别名> -e <环境名>
@@ -191,12 +192,12 @@ go-devops servers -a <程序别名> -e <环境名>
 
 ```bash
 # 列出程序的所有服务器
-go-devops servers -a my-app -e dev2
+go-devops servers -a my-app -e dev2 --json
 ```
 
 #### 5. `version` - 查询版本
 
-查询指定程序的可用版本。
+查询指定程序的可用版本。未显式指定 `-t` 且 `snapshots` 无版本时，自动尝试 `releases`。
 
 ```bash
 go-devops version -a <程序别名> -e <环境名> [-t <程序类型>]
@@ -211,16 +212,18 @@ go-devops version -a <程序别名> -e <环境名> [-t <程序类型>]
 **示例：**
 
 ```bash
-# 查询 snapshots 类型版本
+# 查询 snapshots（为空则自动尝试 releases）
 go-devops version -a my-app -e dev2
 
-# 查询 releases 类型版本
+# 仅查询 releases
 go-devops version -a my-app -e dev2 -t releases
 ```
 
 #### 6. `sql` - SQL 查询
 
 通过 DevOps 数据源 API 浏览元数据并执行 SQL（与 DataGrip 使用的 `devops-jdbc-driver` 同一套后端接口，非直连数据库）。
+
+环境仅 1 个数据源时可省略 `-d`；解析失败时会附带候选列表。
 
 ```bash
 go-devops sql <子命令> [选项]
@@ -236,7 +239,7 @@ go-devops sql <子命令> [选项]
 | 选项 | 简写 | 描述 | 环境变量 |
 |------|------|------|----------|
 | `--env` | `-e` | 环境名称 | `DEVOPS_ENV` |
-| `--datasource` | `-d` | 数据源（支持 catalog name 或 datasourceName） | `DEVOPS_DATASOURCE` |
+| `--datasource` | `-d` | 数据源（支持 name 或 datasourceName；唯一时可省略） | `DEVOPS_DATASOURCE` |
 | `--table` | `-t` | 表名（`describe`） | `DEVOPS_TABLE` |
 | `--sql` | | SQL 语句；为空时从 stdin 读取（`exec`） | `DEVOPS_SQL` |
 | `--page` | | 页码，从 1 开始（`exec`） | |
@@ -307,6 +310,28 @@ go-devops logs query -e www_ali -a smartpos-svc-erp --level ERROR --since 2h
 
 # 或显式指定
 go-devops logs query --project www_ali-z0-smartpos-svc-erp --query timeout --limit 100
+```
+
+#### 8. `history` - 部署历史
+
+查询部署历史（需 `deployHistory:list` 权限），可用于反查 `groupName` / `serverAlias` / 最近版本。
+
+```bash
+go-devops history -e <环境名> [--condition <别名>] [--status <n>] [--page] [--limit] [--json]
+```
+
+| 选项 | 简写 | 描述 | 默认值 | 环境变量 |
+|------|------|------|--------|----------|
+| `--env` | `-e` | 环境名称 | | `DEVOPS_ENV` |
+| `--condition` | `-c` | 搜索条件（程序别名等） | | `DEVOPS_HISTORY_CONDITION` |
+| `--status` | | 部署状态过滤 | | |
+| `--page` / `--limit` | | 分页 | `1` / `20` | |
+| `--json` | | JSON 输出 | | |
+
+**示例：**
+
+```bash
+go-devops history -e www_ali --condition smartpos-svc-erp --limit 20 --json
 ```
 
 ---
@@ -432,6 +457,7 @@ go-devops/
 │   ├── version.go           # 版本查询命令
 │   ├── sql.go               # SQL 查询命令
 │   ├── logs.go              # 程序日志命令
+│   ├── history.go           # 部署历史命令
 │   └── client.go            # 客户端创建
 ├── devops/                  # DevOps API 客户端
 │   ├── devops.go            # 客户端核心
@@ -440,6 +466,7 @@ go-devops/
 │   ├── deploy_history.go    # 部署历史
 │   ├── program_alias.go     # 程序别名
 │   ├── server.go            # 服务器
+│   ├── server_test.go       # 服务器组对齐单测
 │   ├── version.go           # 版本
 │   ├── sql.go               # 数据源 SQL API
 │   ├── sql_test.go          # SQL 解析单测

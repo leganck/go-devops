@@ -19,6 +19,8 @@ func versionCommand() *cli.Command {
 		Usage:     "查询程序可用版本",
 		UsageText: "go-devops version [选项]",
 		Description: "查询指定程序在指定环境中的可用版本列表。\n\n" +
+			"推荐工作流: envs → programs -e → version -e -a\n" +
+			"未显式指定 -t 且 snapshots 无版本时，会自动尝试 releases。\n\n" +
 			"示例:\n" +
 			"  go-devops version -a smartpos-svc-erp-chain -e dev2 -t snapshots",
 		Flags: []cli.Flag{
@@ -31,7 +33,7 @@ func versionCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "program-type",
 				Aliases: []string{"t"},
-				Usage:   "程序类型 (snapshots 或 releases)",
+				Usage:   "程序类型 (snapshots 或 releases)；未指定且 snapshots 为空时自动尝试 releases",
 				Value:   "snapshots",
 				EnvVars: []string{"DEVOPS_PROGRAM_TYPE", "PROGRAM_TYPE"},
 			},
@@ -42,8 +44,8 @@ func versionCommand() *cli.Command {
 				EnvVars: []string{"DEVOPS_ENV", "ENV"},
 			},
 			&cli.BoolFlag{
-				Name:    "json",
-				Usage:   "以 JSON 格式输出",
+				Name:  "json",
+				Usage: "以 JSON 格式输出",
 			},
 		},
 		Action: versionAction,
@@ -54,7 +56,6 @@ func versionCommand() *cli.Command {
 func versionAction(c *cli.Context) error {
 	cfg := getConfig(c)
 
-	// 验证必需参数
 	programAlias := c.String("program-alias")
 	env := c.String("env")
 	if programAlias == "" {
@@ -64,26 +65,32 @@ func versionAction(c *cli.Context) error {
 		return errors.NewValidationError("环境名称不能为空", nil)
 	}
 
-	// 创建 DevOps 客户端并登录
 	client, err := createAndLoginClient(c.Context, cfg)
 	if err != nil {
 		return err
 	}
 
-	// 查询版本
-	versions, err := client.GetVersion(c.Context, &devops.VersionRequest{
-		ProgramAliasName: programAlias,
-		ProgramType:      c.String("program-type"),
-		EnvName:          env,
-	})
+	programType := c.String("program-type")
+	versions, usedType, err := fetchVersionsWithFallback(
+		c.Context,
+		client,
+		programAlias,
+		env,
+		programType,
+		!c.IsSet("program-type"),
+	)
 	if err != nil {
-		return errors.NewAPIError("获取版本失败", err)
+		return err
 	}
 
-	// 输出结果
 	if c.Bool("json") {
-		printVersionsJSON(versions)
+		printVersionsJSON(versions, usedType)
 	} else {
+		if usedType != programType {
+			fmt.Printf("programType=%s（已从 %s 回退）\n\n", usedType, programType)
+		} else {
+			fmt.Printf("programType=%s\n\n", usedType)
+		}
 		printVersionsTable(versions)
 	}
 
@@ -110,22 +117,23 @@ func printVersionsTable(versions []devops.VersionItem) {
 }
 
 // printVersionsJSON 以 JSON 格式打印版本列表
-func printVersionsJSON(versions []devops.VersionItem) {
-	// 创建简化的 JSON 输出结构
+func printVersionsJSON(versions []devops.VersionItem, programType string) {
 	type versionOutput struct {
-		Version    string `json:"version"`
-		Size       string `json:"size"`
-		ModifyTime string `json:"modifyTime"`
-		Path       string `json:"path"`
+		Version     string `json:"version"`
+		Size        string `json:"size"`
+		ModifyTime  string `json:"modifyTime"`
+		Path        string `json:"path"`
+		ProgramType string `json:"programType"`
 	}
 
 	var result []versionOutput
 	for _, v := range versions {
 		result = append(result, versionOutput{
-			Version:    v.Version,
-			Size:       v.Size,
-			ModifyTime: v.ModifyTime,
-			Path:       v.RelativePath,
+			Version:     v.Version,
+			Size:        v.Size,
+			ModifyTime:  v.ModifyTime,
+			Path:        v.RelativePath,
+			ProgramType: programType,
 		})
 	}
 

@@ -14,7 +14,9 @@ func envsCommand() *cli.Command {
 		Name:      "envs",
 		Usage:     "查询可用的环境列表",
 		UsageText: "go-devops envs [选项]",
-		Description: "查询当前用户具有 deployProgram:page 权限的所有环境。\n\n" +
+		Description: "查询当前用户具有 deployProgram:page 权限、且权限 Envs 非空的环境。\n" +
+			"若权限 Envs 为空（全局权限），列表可能为空，需显式传 -e。\n\n" +
+			"推荐工作流起点: envs → programs/sql/logs/history\n\n" +
 			"示例:\n" +
 			"  go-devops envs",
 		Flags: []cli.Flag{
@@ -31,16 +33,13 @@ func envsCommand() *cli.Command {
 func envsAction(c *cli.Context) error {
 	cfg := getConfig(c)
 
-	// 创建 DevOps 客户端并登录
 	client, err := createAndLoginClient(c.Context, cfg)
 	if err != nil {
 		return err
 	}
 
-	// 查询环境列表
 	envs := client.GetEnvs()
 
-	// 输出结果
 	if c.Bool("json") {
 		printEnvsJSON(envs)
 	} else {
@@ -54,6 +53,7 @@ func envsAction(c *cli.Context) error {
 func printEnvsList(envs []string) {
 	if len(envs) == 0 {
 		logger.Infof("没有找到可用环境")
+		fmt.Println("提示: 仅列出 deployProgram:page 且 Envs 非空的环境；全局权限请显式传 -e")
 		return
 	}
 

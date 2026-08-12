@@ -23,13 +23,21 @@ type Server struct {
 	ServerID    string `json:"serverId"`    // 唯一的服务器标识符
 }
 
+// ServerGroup 表示一组部署服务器，可附带从日志项目对齐得到的组名。
+type ServerGroup struct {
+	GroupName   string   `json:"groupName,omitempty"`
+	ProjectName string   `json:"projectName,omitempty"` // env-group-alias
+	Servers     []Server `json:"servers"`
+}
+
 // GetServers 查询可用于部署程序的服务器列表。
 //
 // 该方法返回指定程序在指定环境中可部署的所有服务器。
 // 服务器以组的形式返回，每组表示一个逻辑分组。
 //
 // 权限要求：
-//   需要对指定环境具有 "deployProgram:page" 权限。
+//
+//	需要对指定环境具有 "deployProgram:page" 权限。
 //
 // 参数：
 //   - ctx: 用于控制请求生命周期的上下文
@@ -54,4 +62,41 @@ func (d *DevOps) GetServers(ctx context.Context, req *ServerRequest) ([][]Server
 	}
 
 	return servers, nil
+}
+
+// GetServersWithGroups 查询服务器并尝试对齐 groupName/projectName。
+//
+// /deployProgram/server 不返回组名；通过 /programlog/shortCutPage 的
+// env-group-alias 列表按序对齐（数量一致时才填充，否则留空）。
+func (d *DevOps) GetServersWithGroups(ctx context.Context, req *ServerRequest) ([]ServerGroup, error) {
+	servers, err := d.GetServers(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	projects, err := d.ListLogProjects(ctx, req.EnvName)
+	if err != nil {
+		// 发现失败时仍返回服务器列表，只是没有组名
+		return AlignServerGroups(servers, nil), nil
+	}
+	matches := filterLogProjectsByAlias(projects, req.EnvName, req.ProgramAliasName)
+	return AlignServerGroups(servers, matches), nil
+}
+
+// AlignServerGroups 将 [][]Server 与已按 group 排序的 projectName 列表对齐。
+// 仅当两侧长度一致时填充 GroupName/ProjectName；否则不伪造组名。
+func AlignServerGroups(serverGroups [][]Server, projectMatches []string) []ServerGroup {
+	result := make([]ServerGroup, 0, len(serverGroups))
+	canAlign := len(projectMatches) > 0 && len(projectMatches) == len(serverGroups)
+	for i, servers := range serverGroups {
+		g := ServerGroup{Servers: servers}
+		if canAlign {
+			g.ProjectName = projectMatches[i]
+			if _, group, _, err := ParseProjectName(projectMatches[i]); err == nil {
+				g.GroupName = group
+			}
+		}
+		result = append(result, g)
+	}
+	return result
 }

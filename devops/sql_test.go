@@ -135,6 +135,20 @@ func TestNormalizePageSize(t *testing.T) {
 	}
 }
 
+func TestFormatDatabaseCandidates(t *testing.T) {
+	dbs := []DatabaseInfo{
+		{Name: "z0-erp", DatasourceName: "erp_ds"},
+		{Name: "pos", DatasourceName: "pos"},
+	}
+	got := FormatDatabaseCandidates(dbs, 8)
+	if got != "z0-erp(erp_ds), pos" {
+		t.Fatalf("got=%q", got)
+	}
+	if FormatDatabaseCandidates(nil, 8) != "(无)" {
+		t.Fatal("empty")
+	}
+}
+
 func TestResolveDatasourceLogic(t *testing.T) {
 	dbs := []DatabaseInfo{
 		{Name: "erp", DatasourceName: "erp_ds"},
