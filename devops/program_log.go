@@ -240,20 +240,34 @@ func ParseSinceDuration(raw string) (time.Duration, error) {
 }
 
 func (d *DevOps) getHTML(ctx context.Context, path string) (string, error) {
-	resp, err := d.get(ctx, path)
-	if err != nil {
-		return "", fmt.Errorf("GET %s: %w", path, err)
-	}
-	defer resp.Body.Close()
+	var htmlBody string
+	err := d.withSessionRetry(ctx, func() error {
+		resp, err := d.get(ctx, path)
+		if err != nil {
+			return fmt.Errorf("GET %s: %w", path, err)
+		}
+		defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("读取响应失败: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GET %s: 意外的状态码 %d", path, resp.StatusCode)
-	}
-	return string(body), nil
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("读取响应失败: %w", err)
+		}
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return fmt.Errorf("session expired: HTTP %d for %s", resp.StatusCode, path)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("GET %s: 意外的状态码 %d", path, resp.StatusCode)
+		}
+		trimmed := strings.TrimSpace(string(body))
+		lower := strings.ToLower(trimmed)
+		if strings.Contains(lower, "<html") && (strings.Contains(lower, "login") || strings.Contains(lower, "/auth/form")) &&
+			!strings.Contains(lower, "data-project-name") {
+			return fmt.Errorf("session expired: login page returned for %s", path)
+		}
+		htmlBody = string(body)
+		return nil
+	})
+	return htmlBody, err
 }
 
 func parseLogProjectsHTML(htmlBody string) []string {

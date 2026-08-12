@@ -122,8 +122,8 @@ func sqlEnvFlag() *cli.StringFlag {
 	return &cli.StringFlag{
 		Name:    "env",
 		Aliases: []string{"e"},
-		Usage:   "环境名称",
-		EnvVars: []string{"DEVOPS_ENV", "ENV"},
+		Usage:   "SQL 数据源环境（dsourceDbexec，与部署/日志环境不一定相同）",
+		EnvVars: []string{"DEVOPS_SQL_ENV", "DEVOPS_ENV", "ENV"},
 	}
 }
 

@@ -15,8 +15,8 @@ func envsCommand() *cli.Command {
 		Usage:     "查询可用的环境列表",
 		UsageText: "go-devops envs [选项]",
 		Description: "查询当前用户具有 deployProgram:page 权限、且权限 Envs 非空的环境。\n" +
+			"注意：这是部署环境列表，不等于 SQL(dsourceDbexec) 或日志(programlog) 可用环境。\n" +
 			"若权限 Envs 为空（全局权限），列表可能为空，需显式传 -e。\n\n" +
-			"推荐工作流起点: envs → programs/sql/logs/history\n\n" +
 			"示例:\n" +
 			"  go-devops envs",
 		Flags: []cli.Flag{

@@ -17,7 +17,7 @@
 
 ### 核心特性
 
-- **安全认证** - 支持用户名密码登录，会话自动管理
+- **安全认证** - 用户名密码登录；本地会话文件跨命令复用，失效自动重登
 - **并发部署** - 使用 goroutine 并发监听多个服务器部署任务
 - **智能重试** - SSH 连接失败时自动重试失败的服务器（最多 2 次）
 - **桌面通知** - 部署开始、成功、失败、重试时发送系统通知
@@ -97,8 +97,19 @@ go-devops deploy -e dev2 -v 1.0.0 --wait
 | `--username` | `-u` | 登录用户名 | | `DEVOPS_USERNAME`, `USERNAME` |
 | `--password` | `-p` | 登录密码 | | `DEVOPS_PASSWORD`, `PASSWORD` |
 | `--debug` | | 启用调试模式 | `false` | `DEVOPS_DEBUG`, `DEBUG` |
+| `--fresh-login` | | 忽略本地会话，强制重新登录 | `false` | `DEVOPS_FRESH_LOGIN=1` |
+
+**本地会话（默认开启）：** Cookie 与权限缓存写入 `%USERPROFILE%\.go-devops\sessions\`（Linux/macOS：`$HOME/.go-devops/sessions/`），按 `host+username` 隔离，TTL **8 小时**，不保存密码。跨命令复用会话；API 判定会话失效时自动重登并重试一次。`logout` 可清除当前会话文件。
 
 ### 子命令
+
+#### `logout` - 清除本地登录会话
+
+删除当前 `--host` + `--username` 对应的本地会话文件（下次命令会重新登录）。
+
+```bash
+go-devops logout
+```
 
 #### 1. `deploy` - 部署程序
 

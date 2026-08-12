@@ -34,7 +34,7 @@ func serversCommand() *cli.Command {
 				Name:    "env",
 				Aliases: []string{"e"},
 				Usage:   "环境名称 (例如: dev2, test)",
-				EnvVars: []string{"DEVOPS_ENV", "ENV"},
+				EnvVars: []string{"DEVOPS_DEPLOY_ENV", "DEVOPS_ENV", "ENV"},
 			},
 			&cli.BoolFlag{
 				Name:  "json",

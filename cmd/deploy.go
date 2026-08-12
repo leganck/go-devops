@@ -38,8 +38,8 @@ func deployCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "env",
 				Aliases: []string{"e"},
-				Usage:   "环境名称 (例如: dev2, test)",
-				EnvVars: []string{"DEVOPS_ENV", "ENV"},
+				Usage:   "部署环境（deployProgram，与 SQL/日志环境不一定相同）",
+				EnvVars: []string{"DEVOPS_DEPLOY_ENV", "DEVOPS_ENV", "ENV"},
 			},
 			&cli.StringFlag{
 				Name:    "version",

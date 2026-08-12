@@ -9,12 +9,14 @@
 //   - sql: 通过 DevOps 数据源执行 SQL 查询与元数据浏览
 //   - logs: 查询 DevOps 程序日志（SLS/ES）
 //   - history: 查询部署历史
+//   - logout: 清除本地持久登录会话
 //
 // 全局配置选项：
 //   - host (-H): DevOps API 基础 URL
 //   - username (-u): DevOps 用户名
 //   - password (-p): DevOps 密码
 //   - debug: 启用调试模式
+//   - fresh-login: 忽略本地会话强制重新登录
 //
 // 环境变量支持：
 //   配置可以通过以下环境变量设置：
@@ -22,6 +24,7 @@
 //   - DEVOPS_USERNAME / USERNAME: 用户名
 //   - DEVOPS_PASSWORD / PASSWORD: 密码
 //   - DEVOPS_DEBUG / DEBUG: 调试模式
+//   - DEVOPS_FRESH_LOGIN: 强制重新登录
 //   - PLUGIN_ENV_FILE: 自定义 .env 文件路径
 //
 // 使用示例：
@@ -43,17 +46,18 @@ import (
 
 // Config 包含所有子命令共享的配置
 type Config struct {
-	BaseURL  string
-	Username string
-	Password string
-	Debug    bool
+	BaseURL    string
+	Username   string
+	Password   string
+	Debug      bool
+	FreshLogin bool
 }
 
 // NewApp 创建并配置 CLI 应用程序
 func NewApp() *cli.App {
 	return &cli.App{
-		Name:     "go-devops",
-		Usage:    "DevOps 部署和查询工具",
+		Name:      "go-devops",
+		Usage:     "DevOps 部署和查询工具",
 		Copyright: "Copyright (c) 2025",
 		Authors: []*cli.Author{
 			{
@@ -72,6 +76,7 @@ func NewApp() *cli.App {
 			sqlCommand(),
 			logsCommand(),
 			historyCommand(),
+			logoutCommand(),
 		},
 	}
 }
@@ -125,15 +130,21 @@ func globalFlags() []cli.Flag {
 			Usage:   "启用调试模式显示详细信息",
 			EnvVars: []string{"DEVOPS_DEBUG", "DEBUG"},
 		},
+		&cli.BoolFlag{
+			Name:    "fresh-login",
+			Usage:   "忽略本地会话，强制重新登录",
+			EnvVars: []string{"DEVOPS_FRESH_LOGIN", "FRESH_LOGIN"},
+		},
 	}
 }
 
 // getConfig 从 CLI 上下文获取共享配置
 func getConfig(c *cli.Context) *Config {
 	return &Config{
-		BaseURL:  c.String("host"),
-		Username: c.String("username"),
-		Password: c.String("password"),
-		Debug:    c.Bool("debug"),
+		BaseURL:    c.String("host"),
+		Username:   c.String("username"),
+		Password:   c.String("password"),
+		Debug:      c.Bool("debug"),
+		FreshLogin: c.Bool("fresh-login"),
 	}
 }

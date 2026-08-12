@@ -123,8 +123,8 @@ func logsEnvFlag() *cli.StringFlag {
 	return &cli.StringFlag{
 		Name:    "env",
 		Aliases: []string{"e"},
-		Usage:   "环境名称",
-		EnvVars: []string{"DEVOPS_ENV", "ENV"},
+		Usage:   "日志环境（programlog，与部署/SQL 环境不一定相同）",
+		EnvVars: []string{"DEVOPS_LOG_ENV", "DEVOPS_ENV", "ENV"},
 	}
 }
 

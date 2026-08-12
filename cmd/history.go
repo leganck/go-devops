@@ -29,7 +29,7 @@ func historyCommand() *cli.Command {
 				Name:    "env",
 				Aliases: []string{"e"},
 				Usage:   "环境名称",
-				EnvVars: []string{"DEVOPS_ENV", "ENV"},
+				EnvVars: []string{"DEVOPS_DEPLOY_ENV", "DEVOPS_ENV", "ENV"},
 			},
 			&cli.StringFlag{
 				Name:    "condition",

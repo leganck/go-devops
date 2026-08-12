@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/yassinebenaid/godump"
@@ -104,6 +105,94 @@ func (d *DevOps) Login(ctx context.Context) error {
 	d.logLoginSuccess(&loginData)
 
 	return nil
+}
+
+// EnsureSession 尝试恢复本地会话；无效则重新登录并保存。
+func (d *DevOps) EnsureSession(ctx context.Context) error {
+	if d.FreshLogin {
+		if err := d.Login(ctx); err != nil {
+			return err
+		}
+		return d.SaveSession()
+	}
+
+	sess, err := LoadSessionFile(d.BaseURL, d.Auth.Username)
+	if err != nil {
+		logger.Warningf("load session failed: %v", err)
+	}
+	if sess != nil {
+		if applyErr := applyCookies(d.Client.Jar, d.BaseURL, sess.Cookies); applyErr != nil {
+			logger.Warningf("apply session cookies failed: %v", applyErr)
+		} else {
+			auths := sess.Authorities
+			d.Authorities = &auths
+			if d.Debug {
+				logger.Debugf("restored session for %s (expires %s)", d.Auth.Username, sess.ExpiresAt.Format(time.RFC3339))
+			}
+			return nil
+		}
+	}
+
+	if err := d.Login(ctx); err != nil {
+		return err
+	}
+	return d.SaveSession()
+}
+
+// Relogin 清除本地会话后重新登录并保存。
+func (d *DevOps) Relogin(ctx context.Context) error {
+	_ = ClearSessionFile(d.BaseURL, d.Auth.Username)
+	if jar, err := newEmptyCookieJar(); err == nil {
+		d.Client.Jar = jar
+	}
+	d.Authorities = nil
+	if err := d.Login(ctx); err != nil {
+		return err
+	}
+	return d.SaveSession()
+}
+
+// SaveSession 将当前 Cookie 与 Authorities 写入本地会话文件。
+func (d *DevOps) SaveSession() error {
+	if d.Auth == nil || d.Client == nil || d.Client.Jar == nil {
+		return fmt.Errorf("client not ready for save session")
+	}
+	cookies, err := exportCookies(d.Client.Jar, d.BaseURL)
+	if err != nil {
+		return err
+	}
+	auths := map[string]Authority{}
+	if d.Authorities != nil {
+		auths = *d.Authorities
+	}
+	now := time.Now()
+	sess := &SessionFile{
+		BaseURL:     d.BaseURL,
+		Username:    d.Auth.Username,
+		SavedAt:     now,
+		ExpiresAt:   now.Add(sessionTTL),
+		Cookies:     cookies,
+		Authorities: auths,
+	}
+	if err := SaveSessionFile(sess); err != nil {
+		return err
+	}
+	if d.Debug {
+		logger.Debugf("session saved for %s -> expires %s", d.Auth.Username, sess.ExpiresAt.Format(time.RFC3339))
+	}
+	return nil
+}
+
+// ClearLocalSession 删除当前账号的本地会话文件并清空内存 Cookie。
+func (d *DevOps) ClearLocalSession() error {
+	if d.Auth == nil {
+		return fmt.Errorf("auth not configured")
+	}
+	if jar, err := newEmptyCookieJar(); err == nil {
+		d.Client.Jar = jar
+	}
+	d.Authorities = nil
+	return ClearSessionFile(d.BaseURL, d.Auth.Username)
 }
 
 // logLoginSuccess 记录成功登录的调试信息

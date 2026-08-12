@@ -120,8 +120,10 @@ type DevOps struct {
 	BaseURL     string
 	Client      *http.Client
 	Debug       bool
-	pubKey      interface{}      // 缓存的公钥
+	pubKey      interface{} // 缓存的公钥
 	Authorities *map[string]Authority
+	// FreshLogin 为 true 时忽略本地会话，强制重新登录
+	FreshLogin bool
 }
 
 // NewDevOps 使用给定的凭据和配置创建新的 DevOps 客户端。
@@ -274,13 +276,27 @@ func (d *DevOps) handleResponse(resp *http.Response, path string, result interfa
 		return fmt.Errorf("read response body: %w", err)
 	}
 
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("session expired: HTTP %d for %s", resp.StatusCode, path)
+	}
+
+	trimmed := strings.TrimSpace(string(body))
+	lower := strings.ToLower(trimmed)
+	if strings.Contains(lower, "<html") && (strings.Contains(lower, "login") || strings.Contains(lower, "/auth/")) {
+		return fmt.Errorf("session expired: login page returned for %s", path)
+	}
+
 	var apiResp APIResponse
 	if err := json.Unmarshal(body, &apiResp); err != nil {
 		return fmt.Errorf("parse JSON response: %w (raw: %.200s)", err, string(body))
 	}
 
 	if !apiResp.IsSuccess() {
-		return fmt.Errorf("API error: code=%d, msg=%q", apiResp.Code, apiResp.Msg)
+		errMsg := fmt.Sprintf("API error: code=%d, msg=%q", apiResp.Code, apiResp.Msg)
+		if looksLikeAuthFailure(apiResp.Msg) {
+			return fmt.Errorf("session expired: %s", errMsg)
+		}
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	if result != nil {
@@ -298,26 +314,52 @@ func (d *DevOps) handleResponse(resp *http.Response, path string, result interfa
 	return nil
 }
 
+func looksLikeAuthFailure(msg string) bool {
+	lower := strings.ToLower(msg)
+	for _, m := range []string{"未登录", "请登录", "重新登录", "登录超时", "unauthorized", "authentication", "sys_user_resource"} {
+		if strings.Contains(lower, strings.ToLower(m)) {
+			return true
+		}
+	}
+	return false
+}
+
 // PostRequest 使用表单编码数据执行 POST 请求并处理响应
 func (d *DevOps) PostRequest(ctx context.Context, path string, params url.Values, result interface{}) error {
-	resp, err := d.postForm(ctx, path, params)
-	if err != nil {
-		return fmt.Errorf("POST %s: %w", path, err)
-	}
-	defer resp.Body.Close()
-
-	return d.handleResponse(resp, path, result)
+	return d.withSessionRetry(ctx, func() error {
+		resp, err := d.postForm(ctx, path, params)
+		if err != nil {
+			return fmt.Errorf("POST %s: %w", path, err)
+		}
+		defer resp.Body.Close()
+		return d.handleResponse(resp, path, result)
+	})
 }
 
 // GetRequest 执行 GET 请求并处理响应
 func (d *DevOps) GetRequest(ctx context.Context, path string, result interface{}) error {
-	resp, err := d.get(ctx, path)
-	if err != nil {
-		return fmt.Errorf("GET %s: %w", path, err)
-	}
-	defer resp.Body.Close()
+	return d.withSessionRetry(ctx, func() error {
+		resp, err := d.get(ctx, path)
+		if err != nil {
+			return fmt.Errorf("GET %s: %w", path, err)
+		}
+		defer resp.Body.Close()
+		return d.handleResponse(resp, path, result)
+	})
+}
 
-	return d.handleResponse(resp, path, result)
+func (d *DevOps) withSessionRetry(ctx context.Context, fn func() error) error {
+	err := fn()
+	if err == nil || !IsSessionExpiredError(err) {
+		return err
+	}
+	if d.Debug {
+		logger.Debugf("session expired, relogin and retry: %v", err)
+	}
+	if reloginErr := d.Relogin(ctx); reloginErr != nil {
+		return fmt.Errorf("%w (relogin failed: %v)", err, reloginErr)
+	}
+	return fn()
 }
 
 // hasPermission 检查已认证用户是否具有指定环境的指定权限
