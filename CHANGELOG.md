@@ -2,7 +2,7 @@
 
 ## v0.2.1
 
-- GitHub Actions CI（`main` / PR：tidy、vet、fmt、test、build）和 GoReleaser 发布流水线（`v*` tag：多架构二进制 + GHCR 镜像）。
+- GitHub Actions CI 与 GoReleaser 发布流水线；打 `v*` tag 后产出 linux/windows/darwin 多架构二进制和 GHCR 镜像。
 
 ## v0.2.0
 
