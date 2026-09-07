@@ -9,242 +9,113 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"go-devops/internal/logger"
 	"io"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/yassinebenaid/godump"
 )
 
-const (
-	// rsaPublicKeyPattern 是从 HTML 中提取 RSA 公钥的正则表达式模式
-	rsaPublicKeyPattern = `let rsaPlublic="([\s\S]*?)\n?"`
-)
+const rsaPublicKeyPattern = `let rsaPlublic="([\s\S]*?)\n?"`
 
-// UserMenu 表示登录响应中的菜单项
-type UserMenu struct {
+type userMenu struct {
 	MenuID   StringOrNumber `json:"menuId"`
-	MenuSort interface{}    `json:"menuSort"`
+	MenuSort any            `json:"menuSort"`
 }
 
-// LoginData 包含成功登录后返回的数据
-type LoginData struct {
-	UserMenu    map[StringOrNumber]UserMenu `json:"usermenu"`
-	RedirectURL string                      `json:"redirctUrl"` // 保留 API 拼写错误
+type loginData struct {
+	UserMenu    map[StringOrNumber]userMenu `json:"usermenu"`
+	RedirectURL string                      `json:"redirctUrl"`
 	Authorities map[string]Authority        `json:"authorities"`
 }
 
-// Login 使用 RSA 加密与 DevOps API 进行身份验证
-// 它从登录页面获取 RSA 公钥，加密密码，并发送登录请求。权限被缓存用于权限检查。
-func (d *DevOps) Login(ctx context.Context) error {
-	if d.Auth == nil {
-		return fmt.Errorf("认证未配置")
-	}
-	if d.Auth.Username == "" {
-		return fmt.Errorf("用户名为必填项")
-	}
-	if d.Auth.Password == "" {
-		return fmt.Errorf("密码为必填项")
+// Login authenticates with RSA-encrypted password. Does not persist the session.
+func (c *Client) Login(ctx context.Context) error {
+	if c.creds.Username == "" || c.creds.Password == "" {
+		return invalidArg("username and password are required")
 	}
 
-	pubKeyStr, err := d.fetchLoginPage(ctx)
+	pubKeyStr, err := c.fetchLoginPage(ctx)
 	if err != nil {
-		return fmt.Errorf("获取登录页失败: %w", err)
+		return err
 	}
-
-	if d.pubKey == nil {
+	if c.pubKey == nil {
 		pubKey, err := parseRSAPublicKey(pubKeyStr)
 		if err != nil {
-			return fmt.Errorf("解析公钥失败: %w", err)
+			return serverErr("parse public key", err)
 		}
-		d.pubKey = pubKey
+		c.pubKey = pubKey
 	}
 
-	encPass, err := rsaEncrypt(d.Auth.Password, d.pubKey.(*rsa.PublicKey))
+	encPass, err := rsaEncrypt(c.creds.Password, c.pubKey)
 	if err != nil {
-		return fmt.Errorf("加密密码失败: %w", err)
+		return serverErr("encrypt password", err)
 	}
 
 	params := url.Values{
-		"username": {d.Auth.Username},
+		"username": {c.creds.Username},
 		"password": {encPass},
 	}
-
-	resp, err := d.postForm(ctx, "/auth/form", params)
+	resp, err := c.postForm(ctx, "/auth/form", params)
 	if err != nil {
-		return fmt.Errorf("POST /auth/form 请求失败: %w", err)
+		return err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("读取登录响应失败: %w", err)
+		return serverErr("read login response", err)
 	}
 
 	var apiResp APIResponse
 	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return fmt.Errorf("解析登录 JSON 失败: %w (原始: %.200s)", err, string(body))
+		raw := string(body)
+		if len(raw) > 200 {
+			raw = raw[:200]
+		}
+		return serverErr("parse login JSON: "+raw, err)
 	}
-
 	if !apiResp.IsSuccess() {
-		return fmt.Errorf("登录失败: code=%d, msg=%q", apiResp.Code, apiResp.Msg)
+		msg := sanitizeErrorText(apiResp.Msg)
+		return unauthorized(fmt.Sprintf("login failed: code=%d, msg=%q", apiResp.Code, msg))
 	}
 
-	var loginData LoginData
-	if err := apiResp.WithData(&loginData); err != nil {
-		return fmt.Errorf("解析登录数据失败: %w", err)
+	var data loginData
+	if err := apiResp.WithData(&data); err != nil {
+		return serverErr("parse login data", err)
 	}
-
-	d.Authorities = &loginData.Authorities
-
-	d.logLoginSuccess(&loginData)
-
+	c.setAuthorities(data.Authorities)
+	c.log.Debug("login ok", "menus", len(data.UserMenu), "authorities", len(data.Authorities))
 	return nil
 }
 
-// EnsureSession 尝试恢复本地会话；无效则重新登录并保存。
-func (d *DevOps) EnsureSession(ctx context.Context) error {
-	if d.FreshLogin {
-		if err := d.Login(ctx); err != nil {
-			return err
-		}
-		return d.SaveSession()
-	}
-
-	sess, err := LoadSessionFile(d.BaseURL, d.Auth.Username)
+func (c *Client) fetchLoginPage(ctx context.Context) (string, error) {
+	resp, err := c.get(ctx, "/public/login")
 	if err != nil {
-		logger.Warningf("load session failed: %v", err)
-	}
-	if sess != nil {
-		if applyErr := applyCookies(d.Client.Jar, d.BaseURL, sess.Cookies); applyErr != nil {
-			logger.Warningf("apply session cookies failed: %v", applyErr)
-		} else {
-			auths := sess.Authorities
-			d.Authorities = &auths
-			if d.Debug {
-				logger.Debugf("restored session for %s (expires %s)", d.Auth.Username, sess.ExpiresAt.Format(time.RFC3339))
-			}
-			return nil
-		}
-	}
-
-	if err := d.Login(ctx); err != nil {
-		return err
-	}
-	return d.SaveSession()
-}
-
-// Relogin 清除本地会话后重新登录并保存。
-func (d *DevOps) Relogin(ctx context.Context) error {
-	_ = ClearSessionFile(d.BaseURL, d.Auth.Username)
-	if jar, err := newEmptyCookieJar(); err == nil {
-		d.Client.Jar = jar
-	}
-	d.Authorities = nil
-	if err := d.Login(ctx); err != nil {
-		return err
-	}
-	return d.SaveSession()
-}
-
-// SaveSession 将当前 Cookie 与 Authorities 写入本地会话文件。
-func (d *DevOps) SaveSession() error {
-	if d.Auth == nil || d.Client == nil || d.Client.Jar == nil {
-		return fmt.Errorf("client not ready for save session")
-	}
-	cookies, err := exportCookies(d.Client.Jar, d.BaseURL)
-	if err != nil {
-		return err
-	}
-	auths := map[string]Authority{}
-	if d.Authorities != nil {
-		auths = *d.Authorities
-	}
-	now := time.Now()
-	sess := &SessionFile{
-		BaseURL:     d.BaseURL,
-		Username:    d.Auth.Username,
-		SavedAt:     now,
-		ExpiresAt:   now.Add(sessionTTL),
-		Cookies:     cookies,
-		Authorities: auths,
-	}
-	if err := SaveSessionFile(sess); err != nil {
-		return err
-	}
-	if d.Debug {
-		logger.Debugf("session saved for %s -> expires %s", d.Auth.Username, sess.ExpiresAt.Format(time.RFC3339))
-	}
-	return nil
-}
-
-// ClearLocalSession 删除当前账号的本地会话文件并清空内存 Cookie。
-func (d *DevOps) ClearLocalSession() error {
-	if d.Auth == nil {
-		return fmt.Errorf("auth not configured")
-	}
-	if jar, err := newEmptyCookieJar(); err == nil {
-		d.Client.Jar = jar
-	}
-	d.Authorities = nil
-	return ClearSessionFile(d.BaseURL, d.Auth.Username)
-}
-
-// logLoginSuccess 记录成功登录的调试信息
-func (d *DevOps) logLoginSuccess(data *LoginData) {
-	if !d.Debug {
-		return
-	}
-
-	logger.Debugf("[DEBUG] 登录成功: 重定向=%q, 菜单=%d, 权限=%d",
-		data.RedirectURL,
-		len(data.UserMenu),
-		len(data.Authorities))
-
-	logger.Debug("=== 调试模式: 登录数据 ===")
-	if err := godump.Dump(data); err != nil {
-		logger.Warningf("转储登录数据失败: %v", err)
-	}
-	logger.Debug("==============================")
-}
-
-// fetchLoginPage 获取登录页面 HTML 并提取 RSA 公钥
-func (d *DevOps) fetchLoginPage(ctx context.Context) (string, error) {
-	resp, err := d.get(ctx, "/public/login")
-	if err != nil {
-		return "", fmt.Errorf("GET /public/login 失败: %w", err)
+		return "", err
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GET /public/login: 意外的状态码 %d", resp.StatusCode)
+		return "", classifyStatus(resp.StatusCode, "/public/login", "")
 	}
-
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("读取登录页失败: %w", err)
+		return "", serverErr("read login page", err)
 	}
-
 	pubKeyStr, err := extractRSAPublicKey(string(body))
 	if err != nil {
-		return "", fmt.Errorf("提取公钥失败: %w", err)
+		return "", serverErr("extract public key", err)
 	}
-
 	return pubKeyStr, nil
 }
 
-// extractRSAPublicKey 从 HTML 登录页面提取 RSA 公钥
 func extractRSAPublicKey(html string) (string, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
 	if err != nil {
-		return "", fmt.Errorf("解析 HTML 失败: %w", err)
+		return "", err
 	}
-
 	var script string
 	doc.Find("script").Each(func(_ int, s *goquery.Selection) {
 		t := s.Text()
@@ -252,53 +123,41 @@ func extractRSAPublicKey(html string) (string, error) {
 			script = t
 		}
 	})
-
 	if script == "" {
-		return "", fmt.Errorf("在登录页面中未找到 rsaPlublic 脚本")
+		return "", fmt.Errorf("rsaPlublic script not found")
 	}
-
 	re := regexp.MustCompile(rsaPublicKeyPattern)
 	matches := re.FindStringSubmatch(script)
 	if len(matches) < 2 {
-		return "", fmt.Errorf("rsaPlublic 值未被正则表达式匹配")
+		return "", fmt.Errorf("rsaPlublic value not matched")
 	}
-
-	return processEscapedPublicKey(matches[1]), nil
-}
-
-// processEscapedPublicKey 处理转义的公钥字符串
-func processEscapedPublicKey(s string) string {
+	s := matches[1]
 	s = strings.ReplaceAll(s, "\\/", "/")
 	s = strings.ReplaceAll(s, "\\n", "\n")
-	return strings.TrimSuffix(s, "\n")
+	return strings.TrimSuffix(s, "\n"), nil
 }
 
-// parseRSAPublicKey 解析 PEM 编码的 RSA 公钥
 func parseRSAPublicKey(s string) (*rsa.PublicKey, error) {
 	pemBlock := fmt.Sprintf("-----BEGIN PUBLIC KEY-----\n%s\n-----END PUBLIC KEY-----", s)
 	block, _ := pem.Decode([]byte(pemBlock))
 	if block == nil || block.Type != "PUBLIC KEY" {
-		return nil, fmt.Errorf("无效的 PEM 块：期望为 PUBLIC KEY")
+		return nil, fmt.Errorf("invalid PEM")
 	}
-
 	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("解析 PKIX 公钥失败: %w", err)
+		return nil, err
 	}
-
 	pk, ok := pub.(*rsa.PublicKey)
 	if !ok {
-		return nil, fmt.Errorf("公钥不是 RSA 类型")
+		return nil, fmt.Errorf("not RSA")
 	}
-
 	return pk, nil
 }
 
-// rsaEncrypt 使用 RSA PKCS#1 v1.5 加密明文
 func rsaEncrypt(plain string, pub *rsa.PublicKey) (string, error) {
 	ciphertext, err := rsa.EncryptPKCS1v15(rand.Reader, pub, []byte(plain))
 	if err != nil {
-		return "", fmt.Errorf("RSA 加密失败: %w", err)
+		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }

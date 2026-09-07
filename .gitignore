@@ -27,7 +27,7 @@ Thumbs.db
 
 # 日志文件
 *.log
-logs/
+/logs/
 
 # 测试覆盖率文件
 *.out

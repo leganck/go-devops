@@ -1,6 +1,7 @@
 package devops
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -11,17 +12,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
-	sessionTTL         = 8 * time.Hour
-	sessionDirName     = ".go-devops"
-	sessionSubDirName  = "sessions"
+	sessionTTL        = 8 * time.Hour
+	sessionDirName    = ".go-devops"
+	sessionSubDirName = "sessions"
 )
 
-// persistedCookie 是可序列化的 Cookie 子集。
-type persistedCookie struct {
+// Cookie is a persistable cookie subset (never includes passwords).
+type Cookie struct {
 	Name     string    `json:"name"`
 	Value    string    `json:"value"`
 	Domain   string    `json:"domain"`
@@ -31,18 +33,98 @@ type persistedCookie struct {
 	HTTPOnly bool      `json:"httpOnly"`
 }
 
-// SessionFile 是落盘的会话内容（不含密码）。
-type SessionFile struct {
-	BaseURL     string                `json:"baseURL"`
-	Username    string                `json:"username"`
-	SavedAt     time.Time             `json:"savedAt"`
-	ExpiresAt   time.Time             `json:"expiresAt"`
-	Cookies     []persistedCookie     `json:"cookies"`
-	Authorities map[string]Authority  `json:"authorities"`
+// Session is a persisted login session. JSON is compatible with older files.
+type Session struct {
+	BaseURL     string               `json:"baseURL"`
+	Username    string               `json:"username"`
+	SavedAt     time.Time            `json:"savedAt"`
+	ExpiresAt   time.Time            `json:"expiresAt"`
+	Cookies     []Cookie             `json:"cookies"`
+	Authorities map[string]Authority `json:"authorities"`
 }
 
-// SessionDir 返回会话目录路径。
-func SessionDir() (string, error) {
+// SessionStore persists sessions. Implementations must not store passwords.
+type SessionStore interface {
+	Load(ctx context.Context, baseURL, username string) (*Session, error)
+	Save(ctx context.Context, sess *Session) error
+	Clear(ctx context.Context, baseURL, username string) error
+}
+
+// NopStore disables persistence.
+func NopStore() SessionStore { return nopStore{} }
+
+type nopStore struct{}
+
+func (nopStore) Load(context.Context, string, string) (*Session, error) { return nil, nil }
+func (nopStore) Save(context.Context, *Session) error                   { return nil }
+func (nopStore) Clear(context.Context, string, string) error            { return nil }
+
+// MemoryStore is an in-memory session store (tests, short-lived processes).
+type MemoryStore struct {
+	mu    sync.Mutex
+	clock Clock
+	data  map[string]*Session
+}
+
+func NewMemoryStore() *MemoryStore {
+	return &MemoryStore{clock: systemClock{}, data: map[string]*Session{}}
+}
+
+func (s *MemoryStore) key(baseURL, username string) string {
+	return strings.TrimRight(baseURL, "/") + "|" + username
+}
+
+func (s *MemoryStore) Load(_ context.Context, baseURL, username string) (*Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sess := s.data[s.key(baseURL, username)]
+	if sess == nil {
+		return nil, nil
+	}
+	now := s.clock.Now()
+	if now.After(sess.ExpiresAt) {
+		return nil, nil
+	}
+	cp := *sess
+	return &cp, nil
+}
+
+func (s *MemoryStore) Save(_ context.Context, sess *Session) error {
+	if sess == nil {
+		return invalidArg("session is nil")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.data == nil {
+		s.data = map[string]*Session{}
+	}
+	cp := *sess
+	s.data[s.key(sess.BaseURL, sess.Username)] = &cp
+	return nil
+}
+
+func (s *MemoryStore) Clear(_ context.Context, baseURL, username string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.data, s.key(baseURL, username))
+	return nil
+}
+
+// FileStore persists sessions under ~/.go-devops/sessions with 0700/0600,
+// atomic writes, and a per-file mutex. Isolated by host+username hash.
+type FileStore struct {
+	Dir   string
+	Clock Clock
+	mu    sync.Mutex
+	locks sync.Map
+}
+
+// NewFileStore uses dir if non-empty, otherwise ~/.go-devops/sessions.
+func NewFileStore(dir string) *FileStore {
+	return &FileStore{Dir: dir, Clock: systemClock{}}
+}
+
+func DefaultSessionDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
@@ -50,23 +132,45 @@ func SessionDir() (string, error) {
 	return filepath.Join(home, sessionDirName, sessionSubDirName), nil
 }
 
-// SessionFilePath 按 baseURL+username 生成会话文件路径。
-func SessionFilePath(baseURL, username string) (string, error) {
-	dir, err := SessionDir()
+func sessionFileName(baseURL, username string) string {
+	sum := sha256.Sum256([]byte(strings.TrimRight(baseURL, "/") + "|" + username))
+	return hex.EncodeToString(sum[:8]) + ".json"
+}
+
+func (s *FileStore) dir() (string, error) {
+	if s.Dir != "" {
+		return s.Dir, nil
+	}
+	return DefaultSessionDir()
+}
+
+func (s *FileStore) path(baseURL, username string) (string, error) {
+	d, err := s.dir()
 	if err != nil {
 		return "", err
 	}
-	sum := sha256.Sum256([]byte(strings.TrimRight(baseURL, "/") + "|" + username))
-	name := hex.EncodeToString(sum[:8]) + ".json"
-	return filepath.Join(dir, name), nil
+	return filepath.Join(d, sessionFileName(baseURL, username)), nil
 }
 
-// LoadSessionFile 读取会话文件；过期或不匹配则返回 nil。
-func LoadSessionFile(baseURL, username string) (*SessionFile, error) {
-	path, err := SessionFilePath(baseURL, username)
+// SessionPath returns the file path for a host+username pair.
+func (s *FileStore) SessionPath(baseURL, username string) (string, error) {
+	return s.path(baseURL, username)
+}
+
+func (s *FileStore) lock(path string) *sync.Mutex {
+	v, _ := s.locks.LoadOrStore(path, &sync.Mutex{})
+	return v.(*sync.Mutex)
+}
+
+func (s *FileStore) Load(_ context.Context, baseURL, username string) (*Session, error) {
+	path, err := s.path(baseURL, username)
 	if err != nil {
 		return nil, err
 	}
+	mu := s.lock(path)
+	mu.Lock()
+	defer mu.Unlock()
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -74,8 +178,7 @@ func LoadSessionFile(baseURL, username string) (*SessionFile, error) {
 		}
 		return nil, err
 	}
-
-	var sess SessionFile
+	var sess Session
 	if err := json.Unmarshal(data, &sess); err != nil {
 		return nil, err
 	}
@@ -85,7 +188,11 @@ func LoadSessionFile(baseURL, username string) (*SessionFile, error) {
 	if strings.TrimRight(sess.BaseURL, "/") != strings.TrimRight(baseURL, "/") {
 		return nil, nil
 	}
-	if time.Now().After(sess.ExpiresAt) {
+	now := time.Now()
+	if s.Clock != nil {
+		now = s.Clock.Now()
+	}
+	if now.After(sess.ExpiresAt) {
 		return nil, nil
 	}
 	if len(sess.Cookies) == 0 {
@@ -94,32 +201,44 @@ func LoadSessionFile(baseURL, username string) (*SessionFile, error) {
 	return &sess, nil
 }
 
-// SaveSessionFile 写入会话文件。
-func SaveSessionFile(sess *SessionFile) error {
+func (s *FileStore) Save(_ context.Context, sess *Session) error {
 	if sess == nil {
-		return fmt.Errorf("session is nil")
+		return invalidArg("session is nil")
 	}
-	path, err := SessionFilePath(sess.BaseURL, sess.Username)
+	path, err := s.path(sess.BaseURL, sess.Username)
 	if err != nil {
 		return err
 	}
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	mu := s.lock(path)
+	mu.Lock()
+	defer mu.Unlock()
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(sess, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
-// ClearSessionFile 删除指定用户的会话文件。
-func ClearSessionFile(baseURL, username string) error {
-	path, err := SessionFilePath(baseURL, username)
+func (s *FileStore) Clear(_ context.Context, baseURL, username string) error {
+	path, err := s.path(baseURL, username)
 	if err != nil {
 		return err
 	}
+	mu := s.lock(path)
+	mu.Lock()
+	defer mu.Unlock()
 	err = os.Remove(path)
 	if err != nil && !os.IsNotExist(err) {
 		return err
@@ -127,18 +246,18 @@ func ClearSessionFile(baseURL, username string) error {
 	return nil
 }
 
-func exportCookies(jar http.CookieJar, rawURL string) ([]persistedCookie, error) {
+func exportCookies(jar http.CookieJar, rawURL string) ([]Cookie, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, err
 	}
 	cookies := jar.Cookies(u)
-	out := make([]persistedCookie, 0, len(cookies))
+	out := make([]Cookie, 0, len(cookies))
 	for _, c := range cookies {
 		if c == nil || c.Name == "" {
 			continue
 		}
-		pc := persistedCookie{
+		pc := Cookie{
 			Name:     c.Name,
 			Value:    c.Value,
 			Path:     c.Path,
@@ -161,7 +280,7 @@ func exportCookies(jar http.CookieJar, rawURL string) ([]persistedCookie, error)
 	return out, nil
 }
 
-func applyCookies(jar http.CookieJar, rawURL string, cookies []persistedCookie) error {
+func applyCookies(jar http.CookieJar, rawURL string, cookies []Cookie) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return err
@@ -192,29 +311,20 @@ func newEmptyCookieJar() (http.CookieJar, error) {
 	return cookiejar.New(nil)
 }
 
-// IsSessionExpiredError 判断错误是否像会话失效。
-func IsSessionExpiredError(err error) bool {
-	if err == nil {
-		return false
+func sessionTTLExpiry(now time.Time) time.Time {
+	return now.Add(sessionTTL)
+}
+
+func dumpHasPassword(sess *Session) error {
+	if sess == nil {
+		return nil
 	}
-	msg := strings.ToLower(err.Error())
-	markers := []string{
-		"session expired",
-		"unauthorized",
-		"未登录",
-		"请登录",
-		"重新登录",
-		"登录超时",
-		"login page",
-		"authentication",
-		"sys_user_resource",
-		"http 401",
-		"http 403",
+	raw, err := json.Marshal(sess)
+	if err != nil {
+		return err
 	}
-	for _, m := range markers {
-		if strings.Contains(msg, strings.ToLower(m)) {
-			return true
-		}
+	if strings.Contains(strings.ToLower(string(raw)), `"password"`) {
+		return fmt.Errorf("session must not contain password")
 	}
-	return false
+	return nil
 }
