@@ -39,3 +39,6 @@ coverage/
 
 # Trae AI相关文件
 .trae/
+
+# 编辑器/Agent 本地配置
+.claude/
