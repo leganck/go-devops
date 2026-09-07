@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.2.1
 
 - GitHub Actions CI（`main` / PR：tidy、vet、fmt、test、build）和 GoReleaser 发布流水线（`v*` tag：多架构二进制 + GHCR 镜像）。
 

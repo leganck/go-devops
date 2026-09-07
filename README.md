@@ -9,7 +9,7 @@ GitHub Releases（推荐，打 `v*` tag 后由 GoReleaser 产出多架构二进�
 https://github.com/leganck/go-devops/releases
 
 ```bash
-go install github.com/leganck/go-devops/cmd/go-devops@v0.2.0
+go install github.com/leganck/go-devops/cmd/go-devops@v0.2.1
 ```
 
 容器镜像：`ghcr.io/leganck/go-devops`
