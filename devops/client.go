@@ -13,15 +13,15 @@ import (
 // Client is the shared HTTP + session kernel. Capability packages
 // (deploy/sql/logs) wrap a Client; they do not share a unified default env.
 type Client struct {
-	baseURL    string
-	creds      Credentials
-	http       *http.Client
-	store      SessionStore
-	log        Logger
-	clock      Clock
-	fresh      bool
-	pubKey     *rsa.PublicKey
-	mu         sync.RWMutex
+	baseURL     string
+	creds       Credentials
+	http        *http.Client
+	store       SessionStore
+	log         Logger
+	clock       Clock
+	fresh       bool
+	pubKey      *rsa.PublicKey
+	mu          sync.RWMutex
 	authorities map[string]Authority
 }
 

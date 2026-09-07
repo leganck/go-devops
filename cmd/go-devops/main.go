@@ -5,7 +5,24 @@ import (
 	"os"
 
 	"github.com/leganck/go-devops/internal/logger"
+	"github.com/urfave/cli/v2"
 )
+
+var (
+	version   = "dev"
+	buildTime = "unknown"
+)
+
+func init() {
+	cli.VersionFlag = &cli.BoolFlag{
+		Name:               "version",
+		Usage:              "print CLI version",
+		DisableDefaultText: true,
+	}
+	cli.VersionPrinter = func(c *cli.Context) {
+		fmt.Fprintf(c.App.Writer, "go-devops %s (%s)\n", version, buildTime)
+	}
+}
 
 func main() {
 	app := newApp()

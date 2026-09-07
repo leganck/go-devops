@@ -11,14 +11,14 @@ import (
 type Kind string
 
 const (
-	KindUnauthorized     Kind = "unauthorized"
-	KindForbidden        Kind = "forbidden"
-	KindInvalidArgument  Kind = "invalid_argument"
-	KindNotFound         Kind = "not_found"
-	KindVersionNotFound  Kind = "version_not_found"
-	KindRateLimited      Kind = "rate_limited"
-	KindTransient        Kind = "transient"
-	KindServer           Kind = "server"
+	KindUnauthorized    Kind = "unauthorized"
+	KindForbidden       Kind = "forbidden"
+	KindInvalidArgument Kind = "invalid_argument"
+	KindNotFound        Kind = "not_found"
+	KindVersionNotFound Kind = "version_not_found"
+	KindRateLimited     Kind = "rate_limited"
+	KindTransient       Kind = "transient"
+	KindServer          Kind = "server"
 )
 
 // Error is a stable, inspectable SDK error. Messages never include secrets.

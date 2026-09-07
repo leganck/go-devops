@@ -4,9 +4,15 @@ Go SDK and thin CLI for a DevOps HTTP API. The library has no default host: call
 
 ## Install
 
+GitHub Releases（推荐，打 `v*` tag 后由 GoReleaser 产出多架构二进制和 checksums）：
+
+https://github.com/leganck/go-devops/releases
+
 ```bash
 go install github.com/leganck/go-devops/cmd/go-devops@v0.2.0
 ```
+
+容器镜像：`ghcr.io/leganck/go-devops`
 
 Module: `github.com/leganck/go-devops`
 

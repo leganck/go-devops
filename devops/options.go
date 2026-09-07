@@ -12,15 +12,15 @@ type Credentials struct {
 }
 
 type options struct {
-	baseURL      string
-	creds        Credentials
-	httpClient   *http.Client
-	transport    http.RoundTripper
-	timeout      time.Duration
-	store        SessionStore
-	logger       Logger
-	clock        Clock
-	freshLogin   bool
+	baseURL    string
+	creds      Credentials
+	httpClient *http.Client
+	transport  http.RoundTripper
+	timeout    time.Duration
+	store      SessionStore
+	logger     Logger
+	clock      Clock
+	freshLogin bool
 }
 
 // Option configures a Client.

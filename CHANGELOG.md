@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- GitHub Actions CI（`main` / PR：tidy、vet、fmt、test、build）和 GoReleaser 发布流水线（`v*` tag：多架构二进制 + GHCR 镜像）。
+
 ## v0.2.0
 
 - Module path is `github.com/leganck/go-devops`.

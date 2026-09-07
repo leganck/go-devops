@@ -7,7 +7,10 @@
 
 # Go模块相关文件
 /vendor/
-/go.sum
+
+# 构建产物
+/dist/
+/go-devops
 
 # IDE相关配置
 .idea/

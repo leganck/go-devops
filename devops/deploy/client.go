@@ -11,9 +11,9 @@ const (
 
 // Client exposes deploy-only APIs. It cannot execute SQL or query program logs.
 type Client struct {
-	core   *devops.Client
-	store  HandleStore
-	retry  RetryPolicy
+	core  *devops.Client
+	store HandleStore
+	retry RetryPolicy
 }
 
 // New wraps a kernel client. Session must already be established by the caller

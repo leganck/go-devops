@@ -22,10 +22,11 @@ func newApp() *cli.App {
 	return &cli.App{
 		Name:      "go-devops",
 		Usage:     "DevOps SDK CLI",
+		Version:   version,
 		Copyright: "Copyright (c) 2026",
-		Authors: []*cli.Author{{Name: "leganck", Email: "leganck@outlook.com"}},
-		Before:  loadEnv,
-		Flags:   globalFlags(),
+		Authors:   []*cli.Author{{Name: "leganck", Email: "leganck@outlook.com"}},
+		Before:    loadEnv,
+		Flags:     globalFlags(),
 		Commands: []*cli.Command{
 			deployCommand(),
 			versionCommand(),

@@ -15,3 +15,17 @@ func TestHostRequired(t *testing.T) {
 		t.Fatalf("expected DEVOPS_URL required, got %v", err)
 	}
 }
+
+func TestCLIVersion(t *testing.T) {
+	var buf strings.Builder
+	app := newApp()
+	app.Writer = &buf
+	app.ErrWriter = io.Discard
+	if err := app.Run([]string{"go-devops", "--version"}); err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "go-devops") || !strings.Contains(got, version) {
+		t.Fatalf("expected CLI version output, got %q", got)
+	}
+}
